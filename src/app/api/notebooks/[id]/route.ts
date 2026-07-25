@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { VIEW_MODES } from "@/lib/db/schema";
-import { removeStored } from "@/lib/file-store";
 import {
   NotebookLockedError,
   deleteNotebook,
@@ -44,8 +43,7 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    const orphaned = deleteNotebook(id);
-    await removeStored(...orphaned);
+    deleteNotebook(id);
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "삭제 실패" },

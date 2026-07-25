@@ -1,4 +1,3 @@
-import { makeThumbnail } from "./thumbnail";
 import type { NotebookDTO, ViewMode } from "./types";
 
 /**
@@ -61,24 +60,3 @@ export const api = {
     mutate("/api/memos/reorder", jsonInit("POST", { notebookId, orderedIds })),
 };
 
-/**
- * 파일 업로드 — 썸네일은 브라우저에서 만들어 함께 보낸다.
- * DnD / 붙여넣기 / 파일 선택 모두 이 경로를 쓴다.
- */
-export async function uploadFiles(
-  notebookId: string,
-  files: File[],
-): Promise<NotebookDTO[]> {
-  if (files.length === 0) return [];
-  const fd = new FormData();
-  fd.append("notebookId", notebookId);
-
-  const thumbs = await Promise.all(files.map((f) => makeThumbnail(f)));
-  files.forEach((f, i) => {
-    fd.append("files", f, f.name);
-    const t = thumbs[i];
-    if (t) fd.append(`thumb_${i}`, t);
-  });
-
-  return mutate("/api/upload", { method: "POST", body: fd });
-}

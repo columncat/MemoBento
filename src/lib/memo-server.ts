@@ -9,6 +9,7 @@ import {
   type LegacyPin,
   type LegacyState,
 } from "./legacy-store";
+import { trashMemo, trashNotebook } from "./trash";
 import type { FileDTO, MemoDTO, NotebookDTO } from "./types";
 import { autoIconUrl, hostnameOf } from "./types";
 import { uid } from "./uid";
@@ -167,6 +168,7 @@ function toFileDto(f: typeof schema.files.$inferSelect): FileDTO {
     size: f.size,
     kind: f.kind,
     hasThumb: !!f.thumbPath,
+    encrypted: f.encrypted === 1,
   };
 }
 
@@ -256,25 +258,15 @@ export function updateNotebook(
     .run();
 }
 
-/** 메모함 삭제. 지워야 할 파일 경로들을 돌려준다 (호출부에서 unlink). */
-export function deleteNotebook(id: string): string[] {
+/**
+ * 메모함 삭제 — 실제로 지우지 않고 30일 휴지통으로 옮긴다.
+ * 첨부 파일도 만료 전까지 남으므로 복원하면 그대로 붙는다.
+ */
+export function deleteNotebook(id: string): void {
   const nb = getNotebook(id);
   if (!nb) throw new Error("메모함을 찾을 수 없습니다");
   if (nb.systemKey) throw new NotebookLockedError();
-
-  const paths = collectFilePaths(
-    db
-      .select()
-      .from(schema.memos)
-      .where(eq(schema.memos.notebookId, id))
-      .all()
-      .map((m) => m.fileId),
-  );
-
-  // memos 는 FK ON DELETE CASCADE 로 함께 지워진다. files 행은 수동 정리.
-  db.delete(schema.notebooks).where(eq(schema.notebooks.id, id)).run();
-  deleteFileRows(paths.ids);
-  return paths.rels;
+  trashNotebook(id);
 }
 
 export function reorderNotebooks(orderedIds: string[]): void {
@@ -580,61 +572,37 @@ export function reorderMemos(notebookId: string, orderedIds: string[]): void {
   });
 }
 
-/** 메모 삭제. 지워야 할 파일 경로들을 돌려준다 (호출부에서 unlink). */
-export function deleteMemo(id: string): string[] {
+/** 메모 삭제 — 30일 휴지통으로 옮긴다. */
+export function deleteMemo(id: string): void {
   const loc = locateMemo(id);
   if (!loc) throw new Error("메모를 찾을 수 없습니다");
 
-  if (loc.store === "db") {
-    const row = db
-      .select()
-      .from(schema.memos)
-      .where(eq(schema.memos.id, id))
-      .get();
-    db.delete(schema.memos).where(eq(schema.memos.id, id)).run();
-    if (!row?.fileId) return [];
-    const paths = collectFilePaths([row.fileId]);
-    deleteFileRows(paths.ids);
-    return paths.rels;
-  }
+  // 목록에 보여줄 이름을 먼저 뽑아둔다 (옮기고 나면 못 읽는다)
+  const label = labelOf(id, loc);
+  trashMemo(id, loc, label);
+}
 
+/** 휴지통 목록에 쓸 표시 이름. */
+function labelOf(id: string, loc: MemoLocation): string {
+  if (loc.store === "db") {
+    const row = db.select().from(schema.memos).where(eq(schema.memos.id, id)).get();
+    if (!row) return "";
+    if (row.title) return row.title;
+    if (row.text) return row.text.split("\n")[0];
+    if (row.url) return hostnameOf(row.url);
+    if (row.fileId) {
+      const f = db.select().from(schema.files).where(eq(schema.files.id, row.fileId)).get();
+      if (f) return f.name;
+    }
+    return "";
+  }
   const state = getLegacyState();
   if (loc.store === "pins") {
-    state.pins = state.pins.filter((p) => p.id !== id);
-  } else {
-    state.memos = state.memos.filter((m) => m.id !== id);
+    const p = state.pins.find((x) => x.id === id);
+    return p ? p.title || hostnameOf(p.url) : "";
   }
-  setLegacyState(state);
-  return [];
-}
-
-// ─────────────────────────────────────────────────────────────
-//   파일 행 정리
-// ─────────────────────────────────────────────────────────────
-
-function collectFilePaths(fileIds: (string | null)[]): {
-  ids: string[];
-  rels: string[];
-} {
-  const ids = fileIds.filter((v): v is string => !!v);
-  const rels: string[] = [];
-  for (const fid of ids) {
-    const f = db
-      .select()
-      .from(schema.files)
-      .where(eq(schema.files.id, fid))
-      .get();
-    if (!f) continue;
-    rels.push(f.path);
-    if (f.thumbPath) rels.push(f.thumbPath);
-  }
-  return { ids, rels };
-}
-
-function deleteFileRows(ids: string[]): void {
-  for (const id of ids) {
-    db.delete(schema.files).where(eq(schema.files.id, id)).run();
-  }
+  const m = state.memos.find((x) => x.id === id);
+  return m ? m.text.split("\n")[0] : "";
 }
 
 // ─────────────────────────────────────────────────────────────

@@ -28,8 +28,14 @@ export async function GET(
   }
 
   const ext = row.thumbPath.split(".").pop()?.toLowerCase();
-  const type =
-    ext === "webp" ? "image/webp" : ext === "jpg" ? "image/jpeg" : "image/png";
+  const encrypted = ext === "enc";
+  const type = encrypted
+    ? "application/octet-stream"
+    : ext === "webp"
+      ? "image/webp"
+      : ext === "jpg"
+        ? "image/jpeg"
+        : "image/png";
 
   return new Response(opened.body, {
     headers: {
@@ -38,6 +44,9 @@ export async function GET(
       "Content-Security-Policy": "sandbox",
       "X-Content-Type-Options": "nosniff",
       "Cache-Control": "private, max-age=31536000, immutable",
+      // 암호화된 썸네일은 서비스 워커가 단일 레코드로 풀어서 그린다
+      "X-MB-Encrypted": encrypted ? "1" : "0",
+      "X-MB-Type": "image/webp",
     },
   });
 }

@@ -57,6 +57,15 @@ export const files = sqliteTable("files", {
   path: text("path").notNull(),
   /** 썸네일 PNG 의 UPLOAD_DIR 기준 상대 경로 (없으면 아이콘 폴백). */
   thumbPath: text("thumb_path"),
+
+  /**
+   * 1 = 브라우저에서 AES-GCM 으로 암호화해 올린 파일.
+   * 디스크에는 [IV(12) || ciphertext || tag(16)] 레코드가 chunkSize 단위로
+   * 이어붙어 있고, 서버는 복호화하지 않는다 (Cloudflare 도 암호문만 본다).
+   */
+  encrypted: integer("encrypted").notNull().default(0),
+  /** 암호화 레코드 하나가 담는 평문 바이트 수. encrypted=0 이면 0. */
+  chunkSize: integer("chunk_size").notNull().default(0),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),
@@ -111,6 +120,49 @@ export const widgetState = sqliteTable("widget_state", {
 });
 
 export type WidgetStateRow = typeof widgetState.$inferSelect;
+
+/**
+ * 앱이 보관하는 비밀값 — 지금은 파일 암호화 키 하나.
+ * 키는 로그인한 클라이언트에만 내려가고, 암·복호화는 전부 브라우저에서 한다.
+ */
+export const appSecrets = sqliteTable("app_secrets", {
+  key: text("key").primaryKey(),
+  value: text("value").notNull(),
+  createdAt: integer("created_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+export type AppSecretRow = typeof appSecrets.$inferSelect;
+
+/** 휴지통에 담기는 것의 종류. */
+export const TRASH_KINDS = ["notebook", "memo"] as const;
+export type TrashKind = (typeof TRASH_KINDS)[number];
+
+/**
+ * 삭제한 메모함·메모를 30일간 보관한다.
+ *
+ * 스냅샷(JSON)으로 담는 이유는 시스템 메모함의 메모가 MailBento 의
+ * widget_state 에 살기 때문이다. 거기엔 "삭제됨" 표시를 넣을 자리가 없으므로
+ * (넣으면 MailBento 가 그대로 읽어버린다) 지울 때 통째로 떠서 여기 옮긴다.
+ * 첨부 파일은 만료 전까지 디스크에 그대로 두고 files 행도 남긴다 — 복원하면
+ * 그대로 다시 붙는다.
+ */
+export const trash = sqliteTable("trash", {
+  id: text("id").primaryKey(),
+  kind: text("kind", { enum: TRASH_KINDS }).notNull(),
+  /** 목록에 보여줄 이름. */
+  label: text("label").notNull(),
+  /** 메모라면 원래 있던 메모함 id (복원 대상). */
+  notebookId: text("notebook_id"),
+  /** 복원에 필요한 전체 스냅샷 JSON. */
+  payload: text("payload").notNull(),
+  deletedAt: integer("deleted_at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+});
+
+export type TrashRow = typeof trash.$inferSelect;
 
 /** 로그인 기록 — INSERT 전용 (앱에 DELETE 엔드포인트 없음). */
 export const loginLog = sqliteTable("login_log", {

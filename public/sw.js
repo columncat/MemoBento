@@ -1,0 +1,186 @@
+/**
+ * MemoBento 복호화 서비스 워커.
+ *
+ * 암호화해 올린 파일은 서버에 암호문으로만 있다. 브라우저가 <img> 나 다운로드
+ * 링크로 직접 열면 깨진 바이트를 보게 되므로, /dl/<fileId>/<name> 요청을 여기서
+ * 가로채 원본 응답을 스트리밍 복호화한 뒤 제대로 된 타입으로 돌려준다.
+ *
+ * 스트림으로 처리하기 때문에 5GB 파일도 메모리에 통째로 올라가지 않는다.
+ */
+
+const IV_LEN = 12;
+const TAG_LEN = 16;
+const GCM_OVERHEAD = IV_LEN + TAG_LEN;
+
+self.addEventListener("install", () => self.skipWaiting());
+self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
+
+let keyPromise = null;
+
+/** 키는 워커가 직접 받아온다 (같은 오리진이라 세션 쿠키가 실린다). */
+function getKey() {
+  if (!keyPromise) {
+    keyPromise = fetch("/api/files/key", { credentials: "same-origin" })
+      .then((r) => {
+        if (!r.ok) throw new Error("key fetch failed: " + r.status);
+        return r.json();
+      })
+      .then(({ key }) => {
+        const raw = Uint8Array.from(atob(key), (c) => c.charCodeAt(0));
+        return crypto.subtle.importKey("raw", raw, { name: "AES-GCM" }, false, [
+          "decrypt",
+        ]);
+      })
+      .catch((e) => {
+        keyPromise = null;
+        throw e;
+      });
+  }
+  return keyPromise;
+}
+
+/**
+ * 고정 길이 레코드를 모아 하나씩 복호화해 흘려보내는 변환 스트림.
+ * 마지막 레코드는 짧을 수 있다.
+ */
+function decryptStream(key, recordSize) {
+  let buf = new Uint8Array(0);
+
+  const append = (chunk) => {
+    const next = new Uint8Array(buf.byteLength + chunk.byteLength);
+    next.set(buf, 0);
+    next.set(chunk, buf.byteLength);
+    buf = next;
+  };
+
+  const decryptOne = async (record, controller) => {
+    const iv = record.subarray(0, IV_LEN);
+    const ct = record.subarray(IV_LEN);
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+    controller.enqueue(new Uint8Array(plain));
+  };
+
+  return new TransformStream({
+    async transform(chunk, controller) {
+      append(chunk);
+      while (buf.byteLength >= recordSize) {
+        const record = buf.subarray(0, recordSize);
+        buf = buf.subarray(recordSize);
+        await decryptOne(record, controller);
+      }
+    },
+    async flush(controller) {
+      if (buf.byteLength === 0) return;
+      if (buf.byteLength <= GCM_OVERHEAD) {
+        throw new Error("잘린 암호문");
+      }
+      await decryptOne(buf, controller);
+    },
+  });
+}
+
+self.addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+
+  // 썸네일: /dl/t/<fileId>  (레코드 하나짜리 암호문)
+  const t = /^\/dl\/t\/([^/]+)$/.exec(url.pathname);
+  if (t) {
+    event.respondWith(serveThumb(t[1]));
+    return;
+  }
+
+  const m = /^\/dl\/([^/]+)(?:\/.*)?$/.exec(url.pathname);
+  if (!m) return;
+
+  const fileId = m[1];
+  const wantsDownload = url.searchParams.get("dl") === "1";
+  event.respondWith(serve(fileId, wantsDownload, event.request));
+});
+
+async function serveThumb(fileId) {
+  const upstream = await fetch(
+    `/api/files/${encodeURIComponent(fileId)}/thumb`,
+    { credentials: "same-origin" },
+  );
+  if (!upstream.ok) return upstream;
+  if (upstream.headers.get("X-MB-Encrypted") !== "1") return upstream;
+
+  try {
+    const key = await getKey();
+    const record = new Uint8Array(await upstream.arrayBuffer());
+    const iv = record.subarray(0, IV_LEN);
+    const ct = record.subarray(IV_LEN);
+    const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+    return new Response(plain, {
+      status: 200,
+      headers: {
+        "Content-Type": upstream.headers.get("X-MB-Type") || "image/webp",
+        "Cache-Control": "no-store",
+      },
+    });
+  } catch (e) {
+    return new Response("", { status: 500 });
+  }
+}
+
+async function serve(fileId, wantsDownload, request) {
+  // Range 는 암호문 오프셋 기준이라 그대로 넘기면 복호화가 어긋난다.
+  // 처음부터 스트리밍해서 내려준다 (브라우저 다운로드 관리자가 이어서 처리).
+  const upstream = await fetch(`/api/files/${encodeURIComponent(fileId)}`, {
+    credentials: "same-origin",
+    headers: request.headers.get("accept")
+      ? { accept: request.headers.get("accept") }
+      : undefined,
+  });
+
+  if (!upstream.ok || !upstream.body) return upstream;
+
+  const encrypted = upstream.headers.get("X-MB-Encrypted") === "1";
+  const type =
+    upstream.headers.get("X-MB-Type") ||
+    upstream.headers.get("Content-Type") ||
+    "application/octet-stream";
+  const rawName = upstream.headers.get("X-MB-Name") || fileId;
+  let name = fileId;
+  try {
+    name = decodeURIComponent(rawName);
+  } catch {
+    /* 그대로 둔다 */
+  }
+  const plainSize = upstream.headers.get("X-MB-Plain-Size");
+
+  const headers = new Headers({
+    "Content-Type": type,
+    "Content-Disposition": `${wantsDownload ? "attachment" : "inline"}; ${disposition(name)}`,
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff",
+  });
+  // 암호화 파일은 Range 를 지원하지 않는다고 알려 브라우저가 부분요청을 걸지 않게 함
+  headers.set("Accept-Ranges", "none");
+  if (plainSize) headers.set("Content-Length", plainSize);
+
+  if (!encrypted) {
+    return new Response(upstream.body, { status: 200, headers });
+  }
+
+  const chunkSize = Number(upstream.headers.get("X-MB-Chunk-Size") || 0);
+  if (!chunkSize) {
+    return new Response("복호화 정보를 읽을 수 없습니다", { status: 500 });
+  }
+
+  try {
+    const key = await getKey();
+    const body = upstream.body.pipeThrough(
+      decryptStream(key, chunkSize + GCM_OVERHEAD),
+    );
+    return new Response(body, { status: 200, headers });
+  } catch (e) {
+    return new Response("복호화 실패: " + (e && e.message), { status: 500 });
+  }
+}
+
+function disposition(name) {
+  const ascii = name.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "_");
+  return `filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name)}`;
+}

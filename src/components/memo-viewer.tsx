@@ -12,10 +12,11 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { useSwReady } from "@/lib/sw-client";
 import {
-  fileUrl,
   formatBytes,
   memoLabel,
+  viewUrl,
   type MemoDTO,
 } from "@/lib/types";
 import { cn, formatDateTime } from "@/lib/utils";
@@ -41,6 +42,7 @@ export function MemoViewer({ memo, onClose, onSave, onDelete }: Props) {
   const [draftUrl, setDraftUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const swReady = useSwReady();
 
   useEffect(() => {
     setDraftText(memo?.text ?? "");
@@ -80,7 +82,7 @@ export function MemoViewer({ memo, onClose, onSave, onDelete }: Props) {
   };
 
   const remove = async () => {
-    if (!confirm("이 메모를 삭제할까요?")) return;
+    if (!confirm("이 메모를 휴지통으로 옮길까요? (30일 안에 되살릴 수 있습니다)")) return;
     setBusy(true);
     setError(null);
     try {
@@ -153,7 +155,7 @@ export function MemoViewer({ memo, onClose, onSave, onDelete }: Props) {
             <div className="flex shrink-0 items-center gap-1.5">
               {memo.file && (
                 <a
-                  href={fileUrl(memo.file.id, true)}
+                  href={viewUrl(memo.file, { dl: true, swReady })}
                   download={memo.file.name}
                   className="flex items-center gap-1.5 rounded-full bg-(--color-bg-2) px-3 py-1.5 text-xs text-(--color-fg-2) ring-1 ring-(--color-border-soft) transition hover:bg-(--color-surface-hi)"
                 >
@@ -244,6 +246,8 @@ function ViewerBody({
   draftUrl: string;
   onDraftUrl: (v: string) => void;
 }) {
+  const swReady = useSwReady();
+
   if (memo.type === "text") {
     return (
       <textarea
@@ -290,7 +294,7 @@ function ViewerBody({
       <div className="thumb-checker grid min-h-[320px] place-items-center p-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={fileUrl(file.id)}
+          src={viewUrl(file, { swReady })}
           alt={file.name}
           className="max-h-[68vh] max-w-full object-contain"
         />
@@ -301,7 +305,7 @@ function ViewerBody({
   if (file.kind === "pdf") {
     return (
       <iframe
-        src={fileUrl(file.id)}
+        src={viewUrl(file, { swReady })}
         title={file.name}
         className="h-[70vh] w-full border-0 bg-white"
       />
@@ -309,7 +313,7 @@ function ViewerBody({
   }
 
   if (file.kind === "text") {
-    return <TextFileBody fileId={file.id} />;
+    return <TextFileBody file={file} swReady={swReady} />;
   }
 
   return (
@@ -319,7 +323,7 @@ function ViewerBody({
         앱 안에서 열람할 수 없는 형식입니다
       </p>
       <a
-        href={fileUrl(file.id, true)}
+        href={viewUrl(file, { dl: true, swReady })}
         download={file.name}
         className="rounded-full bg-(--color-accent) px-4 py-2 text-xs font-medium text-(--color-bg) hover:bg-(--color-accent-strong)"
       >
@@ -329,7 +333,14 @@ function ViewerBody({
   );
 }
 
-function TextFileBody({ fileId }: { fileId: string }) {
+function TextFileBody({
+  file,
+  swReady,
+}: {
+  file: NonNullable<MemoDTO["file"]>;
+  swReady: boolean;
+}) {
+  const url = viewUrl(file, { swReady });
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);
@@ -340,7 +351,7 @@ function TextFileBody({ fileId }: { fileId: string }) {
     setError(null);
     setTruncated(false);
 
-    fetch(fileUrl(fileId), { signal: ac.signal, cache: "no-store" })
+    fetch(url, { signal: ac.signal, cache: "no-store" })
       .then(async (res) => {
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         return res.text();
@@ -359,7 +370,7 @@ function TextFileBody({ fileId }: { fileId: string }) {
       });
 
     return () => ac.abort();
-  }, [fileId]);
+  }, [url]);
 
   if (error) {
     return (

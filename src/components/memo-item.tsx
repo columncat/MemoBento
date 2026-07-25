@@ -14,13 +14,14 @@ import {
 import { useState } from "react";
 
 import { activeMemoDrag, beginMemoDrag, endMemoDrag } from "@/lib/dnd";
+import { useSwReady } from "@/lib/sw-client";
 import {
   MEMO_DND_TYPE,
-  fileUrl,
   hostnameOf,
   memoLabel,
   thumbUrl,
   formatBytes,
+  viewUrl,
   type MemoDTO,
   type MemoDragPayload,
 } from "@/lib/types";
@@ -53,6 +54,7 @@ export function MemoIcon({
 
 /** 썸네일 또는 아이콘/파비콘. */
 function Thumb({ memo, size }: { memo: MemoDTO; size: "sm" | "lg" }) {
+  const swReady = useSwReady();
   const box = size === "sm" ? "h-10 w-10 rounded-md" : "h-full w-full rounded-none";
 
   if (memo.type === "link" && memo.iconUrl) {
@@ -85,7 +87,7 @@ function Thumb({ memo, size }: { memo: MemoDTO; size: "sm" | "lg" }) {
       <div className={cn("thumb-checker shrink-0 overflow-hidden", box)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={thumbUrl(memo.file.id)}
+          src={thumbUrl(memo.file, swReady)}
           alt=""
           loading="lazy"
           className="h-full w-full object-cover"
@@ -115,6 +117,7 @@ function ActionButtons({
   actions: MemoActions;
   floating?: boolean;
 }) {
+  const swReady = useSwReady();
   const stop = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -132,7 +135,7 @@ function ActionButtons({
     >
       {memo.file && (
         <a
-          href={fileUrl(memo.file.id, true)}
+          href={viewUrl(memo.file, { dl: true, swReady })}
           download={memo.file.name}
           onClick={(e) => e.stopPropagation()}
           className={btn}

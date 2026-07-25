@@ -4,9 +4,11 @@ import Link from "next/link";
 import { isAuthEnabled } from "@/lib/auth";
 import { isExternalLegacy } from "@/lib/legacy-store";
 import { SYSTEM_NOTEBOOKS, listNotebooks } from "@/lib/memo-server";
+import { RETENTION_DAYS } from "@/lib/trash";
 
 import { PreferencesPanel } from "./preferences-panel";
 import { SettingsIO } from "./settings-io";
+import { TrashPanel } from "./trash-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -104,6 +106,9 @@ export default async function SettingsPage() {
           편집할 수 있습니다.
         </p>
       </section>
+
+      {/* 휴지통 */}
+      <TrashPanel retentionDays={RETENTION_DAYS} />
 
       {/* 표시 설정 */}
       <PreferencesPanel />

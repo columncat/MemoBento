@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { removeStored } from "@/lib/file-store";
 import { deleteMemo, listNotebooks, updateMemo } from "@/lib/memo-server";
 import { normalizeUrl } from "@/lib/types";
 
@@ -53,8 +52,7 @@ export async function DELETE(
 ) {
   const { id } = await params;
   try {
-    const orphaned = deleteMemo(id);
-    await removeStored(...orphaned);
+    deleteMemo(id);
   } catch (e) {
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "삭제 실패" },

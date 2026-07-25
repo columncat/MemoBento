@@ -5,8 +5,8 @@ const envSchema = z.object({
 
   /** 업로드 원본/썸네일이 저장되는 디렉터리. Docker 에서는 볼륨 내부. */
   UPLOAD_DIR: z.string().default("./data/uploads"),
-  /** 업로드 1건당 최대 크기 (MB). */
-  MAX_UPLOAD_MB: z.coerce.number().int().positive().max(2048).default(50),
+  /** 업로드 1건당 최대 크기 (MB). 청크 전송이라 메모리와 무관하게 키울 수 있다. */
+  MAX_UPLOAD_MB: z.coerce.number().int().positive().max(51200).default(5120),
 
   /**
    * MailBento SQLite 파일 경로 (선택).

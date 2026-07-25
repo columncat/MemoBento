@@ -24,6 +24,8 @@ export interface FileDTO {
   kind: FileKind;
   /** 썸네일 이미지 존재 여부. true 면 /api/files/{id}/thumb 사용 가능. */
   hasThumb: boolean;
+  /** 브라우저에서 암호화해 올린 파일인가 — 열람하려면 서비스 워커가 필요하다. */
+  encrypted: boolean;
 }
 
 export interface MemoDTO {
@@ -82,14 +84,37 @@ export interface MemoDragPayload {
   type: MemoType;
 }
 
-/** 파일 원본 URL. dl=true 면 다운로드(attachment). */
+/** 저장된 바이트 그대로의 URL (암호화 파일이면 암호문). */
 export function fileUrl(fileId: string, dl = false): string {
   return `/api/files/${encodeURIComponent(fileId)}${dl ? "?dl=1" : ""}`;
 }
 
-/** 썸네일 URL. */
-export function thumbUrl(fileId: string): string {
-  return `/api/files/${encodeURIComponent(fileId)}/thumb`;
+/**
+ * 사람이 볼 수 있는 형태의 URL.
+ *
+ * 암호화 파일은 서비스 워커가 가로채 복호화하는 `/dl/...` 로 보낸다.
+ * 워커가 아직 안 잡혔으면 원본 URL 로 떨어뜨리는데, 그 경우 암호화 파일은
+ * 열리지 않으므로 호출부가 swReady 를 보고 안내한다.
+ */
+export function viewUrl(
+  file: Pick<FileDTO, "id" | "name" | "encrypted">,
+  opts: { dl?: boolean; swReady?: boolean } = {},
+): string {
+  const { dl = false, swReady = false } = opts;
+  if (!file.encrypted) return fileUrl(file.id, dl);
+  if (!swReady) return fileUrl(file.id, dl);
+  return `/dl/${encodeURIComponent(file.id)}/${encodeURIComponent(file.name)}${
+    dl ? "?dl=1" : ""
+  }`;
+}
+
+/** 썸네일 URL. 암호화된 썸네일은 서비스 워커가 풀어서 그린다. */
+export function thumbUrl(
+  file: Pick<FileDTO, "id" | "encrypted">,
+  swReady = false,
+): string {
+  if (file.encrypted && swReady) return `/dl/t/${encodeURIComponent(file.id)}`;
+  return `/api/files/${encodeURIComponent(file.id)}/thumb`;
 }
 
 /** 메모 표시 이름 — 파일 메모는 title override 없으면 원본 파일명. */

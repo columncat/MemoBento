@@ -15,6 +15,7 @@ import {
 } from "@dnd-kit/sortable";
 import {
   AlertCircle,
+  ArrowUpFromLine,
   Link2,
   NotebookPen,
   RefreshCw,
@@ -24,7 +25,12 @@ import {
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { api, uploadFiles } from "@/lib/client-api";
+import { api } from "@/lib/client-api";
+import { registerDecryptWorker, useSwReady } from "@/lib/sw-client";
+import {
+  enqueueUploads,
+  setTransferSink,
+} from "@/lib/transfer-queue";
 import {
   COLUMN_CLASS,
   DEFAULT_COLUMNS,
@@ -32,8 +38,8 @@ import {
   type ColumnsPref,
 } from "@/lib/preferences";
 import {
-  fileUrl,
   looksLikeUrl,
+  viewUrl,
   type MemoDTO,
   type NotebookDTO,
   type ViewMode,
@@ -46,6 +52,7 @@ import { MemoViewer } from "./memo-viewer";
 import { NotebookModal } from "./notebook-modal";
 import { AddNotebookCard, type NotebookHandlers } from "./notebook-card";
 import { PastePicker, type PendingPaste } from "./paste-picker";
+import { TransferPanel, useTransferSummary } from "./transfer-panel";
 import { SortableNotebookCard } from "./sortable-notebook-card";
 
 export function Dashboard({
@@ -66,6 +73,7 @@ export function Dashboard({
   const [pending, setPending] = useState<PendingPaste | null>(null);
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [queueOpen, setQueueOpen] = useState(false);
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ─ 에러 토스트 ─
@@ -87,6 +95,17 @@ export function Dashboard({
     },
     [fail],
   );
+
+  // ─ 복호화 서비스 워커 + 업로드 큐 배선 ─
+  const swReady = useSwReady();
+  const transfers = useTransferSummary();
+  useEffect(() => {
+    registerDecryptWorker();
+    setTransferSink((next) => setNotebooks(next));
+  }, []);
+  useEffect(() => {
+    if (transfers.active > 0) setQueueOpen(true);
+  }, [transfers.active]);
 
   // ─ 표시 prefs ─
   useEffect(() => {
@@ -170,7 +189,7 @@ export function Dashboard({
       const nb = notebooks.find((n) => n.id === notebookId);
       try {
         if (p.kind === "files") {
-          setNotebooks(await uploadFiles(notebookId, p.files));
+          if (nb) enqueueUploads(nb, p.files);
           return;
         }
         // 대상이 받는 종류에 맞춘다 — 텍스트 전용 메모함이면 URL 도 텍스트로
@@ -193,7 +212,10 @@ export function Dashboard({
     () => ({
       addText: (id, text) => run(() => api.createTextMemo(id, text)),
       addLink: (id, url) => run(() => api.createLinkMemo(id, url)),
-      addFiles: (id, files) => run(() => uploadFiles(id, files)),
+      addFiles: async (id, files) => {
+        const nb = notebooks.find((n) => n.id === id);
+        if (nb) enqueueUploads(nb, files);
+      },
       moveMemo: (memoId, toNotebookId) =>
         run(() => api.updateMemo(memoId, { notebookId: toNotebookId })),
       notify: (message) => fail(new Error(message)),
@@ -214,8 +236,8 @@ export function Dashboard({
         const count = nb?.memos.length ?? 0;
         const msg =
           count > 0
-            ? `"${nb?.name}" 메모함과 그 안의 메모 ${count}개(첨부 파일 포함)를 삭제합니다. 되돌릴 수 없습니다. 진행할까요?`
-            : `"${nb?.name}" 메모함을 삭제할까요?`;
+            ? `"${nb?.name}" 메모함과 그 안의 메모 ${count}개를 휴지통으로 옮깁니다. 30일 안에는 설정 > 휴지통에서 되살릴 수 있습니다. 진행할까요?`
+            : `"${nb?.name}" 메모함을 휴지통으로 옮길까요?`;
         if (!confirm(msg)) return;
         if (expandedId === id) setExpandedId(null);
         void run(() => api.deleteNotebook(id)).catch(() => undefined);
@@ -235,14 +257,14 @@ export function Dashboard({
         }
         // 앱에서 열 수 없는 일반 파일은 클릭 즉시 다운로드
         if (memo.file && memo.file.kind === "file") {
-          triggerDownload(memo.file.id, memo.file.name);
+          triggerDownload(viewUrl(memo.file, { dl: true, swReady }), memo.file.name);
           return;
         }
         setViewerId(memo.id);
       },
       onEdit: (memo) => setViewerId(memo.id),
       onDelete: (memo) => {
-        if (!confirm("이 메모를 삭제할까요?")) return;
+        if (!confirm("이 메모를 휴지통으로 옮길까요? (30일 안에 되살릴 수 있습니다)")) return;
         void run(() => api.deleteMemo(memo.id)).catch(() => undefined);
       },
       onDropOnMemo: (payload, target) => {
@@ -267,7 +289,7 @@ export function Dashboard({
         void run(() => api.reorderMemos(nb.id, ids)).catch(() => undefined);
       },
     }),
-    [run, notebooks],
+    [run, notebooks, swReady],
   );
 
   const viewerMemo = useMemo(() => {
@@ -339,6 +361,28 @@ export function Dashboard({
         </div>
 
         <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setQueueOpen((v) => !v)}
+            aria-pressed={queueOpen}
+            title="전송 큐"
+            className={cn(
+              "relative flex items-center gap-2 rounded-full px-4 py-2 text-sm ring-1 transition",
+              transfers.active > 0
+                ? "bg-(--color-accent-soft) text-(--color-accent-strong) ring-(--color-accent)/40"
+                : "bg-(--color-surface) text-(--color-fg-2) ring-(--color-border-soft) hover:bg-(--color-surface-2)",
+            )}
+          >
+            <ArrowUpFromLine
+              className={cn("h-4 w-4", transfers.active > 0 && "animate-pulse")}
+            />
+            <span className="hidden sm:inline">전송</span>
+            {transfers.total > 0 && (
+              <span className="rounded-full bg-(--color-bg-2) px-1.5 py-0.5 font-mono text-[10px] text-(--color-fg-3)">
+                {transfers.active > 0 ? transfers.active : transfers.total}
+              </span>
+            )}
+          </button>
           <MailBentoLink href={mailbentoUrl} />
           <button
             type="button"
@@ -412,6 +456,9 @@ export function Dashboard({
         onClose={() => setExpandedId(null)}
       />
 
+      {/* 업로드 큐 */}
+      <TransferPanel open={queueOpen} onClose={() => setQueueOpen(false)} />
+
       {/* 붙여넣기 대상 선택 */}
       <PastePicker
         pending={pending}
@@ -440,9 +487,9 @@ export function Dashboard({
 }
 
 /** 열람 불가 형식 — 클릭 즉시 다운로드. */
-function triggerDownload(fileId: string, name: string) {
+function triggerDownload(href: string, name: string) {
   const a = document.createElement("a");
-  a.href = fileUrl(fileId, true);
+  a.href = href;
   a.download = name;
   a.rel = "noreferrer";
   document.body.appendChild(a);
