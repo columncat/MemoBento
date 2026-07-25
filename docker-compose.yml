@@ -1,0 +1,29 @@
+services:
+  memobento:
+    build: .
+    image: memobento:latest
+    container_name: MemoBento
+    restart: unless-stopped
+    ports:
+      - "3001:3000"
+    # 시크릿/설정은 .env.local 에서 주입 (.env.example 참고, git 에는 미포함)
+    env_file:
+      - .env.local
+    environment:
+      # DB / 업로드 경로는 볼륨 위치로 고정 (.env.local 값보다 우선)
+      DATABASE_PATH: /app/data/memobento.db
+      UPLOAD_DIR: /app/data/uploads
+      MIGRATIONS_DIR: /app/drizzle
+    volumes:
+      # SQLite DB + 업로드 파일 영속화 — 재배포해도 메모함/메모/첨부 유지
+      #
+      # ⚠ 첫 실행 전에 호스트에서 한 번:  mkdir -p data/uploads && chmod -R 777 data
+      #   컨테이너는 uid 1001(nodejs)로 도는데 Synology 바인드 마운트는 uid 매핑을
+      #   하지 않아, 권한이 없으면 SQLITE_CANTOPEN 으로 500 이 난다.
+      - ./data:/app/data
+      # MailBento 의 data 디렉터리 (같은 호스트에 나란히 배포한 경우).
+      # 마운트만으로는 아무 일도 일어나지 않는다 — 실제 스위치는 .env.local 의
+      #   MAILBENTO_DB_PATH=/app/mailbento/mailbento.db
+      # 를 채우는 것. 비워두면 MemoBento 자체 DB 를 쓴다.
+      # MailBento 가 없는 호스트라면 이 줄을 지워도 된다.
+      - ../MailBento/data:/app/mailbento
