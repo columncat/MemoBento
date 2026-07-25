@@ -28,8 +28,9 @@ export function MemoList({
   }
 
   if (viewMode === "grid") {
+    // 카드 폭과 무관하게 한 행에 3개 고정
     return (
-      <ul className="grid grid-cols-[repeat(auto-fill,minmax(112px,1fr))] gap-2">
+      <ul className="grid grid-cols-3 gap-2">
         {memos.map((m) => (
           <MemoTile key={m.id} memo={m} actions={actions} />
         ))}

@@ -37,7 +37,8 @@ export const STORAGE_KEYS = {
  * 그래서 xl 까지는 3단으로 두고 2xl(1536px) 이상에서만 선택한 단수로 펼친다.
  */
 export const COLUMN_CLASS: Record<ColumnsPref, string> = {
-  auto: "grid-cols-1 md:grid-cols-2 xl:grid-cols-3",
+  // auto 는 화면이 넓어질수록 열을 늘린다 (컨테이너 상한 2560px 까지)
+  auto: "grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 min-[2200px]:grid-cols-5",
   "1": "grid-cols-1",
   "2": "grid-cols-1 md:grid-cols-2",
   "3": "grid-cols-1 md:grid-cols-2 xl:grid-cols-3",

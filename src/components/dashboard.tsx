@@ -307,7 +307,8 @@ export function Dashboard({
   const totalMemos = notebooks.reduce((s, n) => s + n.memos.length, 0);
 
   return (
-    <main className="relative mx-auto flex min-h-screen w-full max-w-[1920px] flex-col gap-6 px-6 py-10 lg:px-10">
+    // 넓은 화면에서는 가로를 더 쓴다 — 2560px 모니터에서 1920 으로 잘리지 않도록
+    <main className="relative mx-auto flex min-h-screen w-full max-w-[2560px] flex-col gap-6 px-6 py-10 lg:px-10">
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <div className="grid h-10 w-10 place-items-center rounded-xl bg-(--color-surface) ring-1 ring-(--color-border-soft)">

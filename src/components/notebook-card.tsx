@@ -216,7 +216,8 @@ export function NotebookCard({
       className={cn(
         // @container — 6단처럼 카드가 좁아지면 헤더 버튼을 컨테이너 폭 기준으로 접는다
         "group/card @container relative flex flex-col rounded-[var(--radius-card)] bg-(--color-surface) ring-1 ring-(--color-border-soft) transition",
-        flush ? "h-full min-h-0" : "h-[460px]",
+        // 세로로 더 길게. 화면이 크면 한 번 더 늘린다.
+        flush ? "h-full min-h-0" : "h-[580px] xl:h-[660px] 2xl:h-[740px]",
         dragging && "ring-2 ring-(--color-accent)",
       )}
     >
@@ -485,7 +486,7 @@ export function AddNotebookCard({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex h-[460px] flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-(--color-border) text-(--color-fg-4) transition hover:border-(--color-accent)/60 hover:bg-(--color-surface)/40 hover:text-(--color-fg-2)"
+        className="flex h-[580px] xl:h-[660px] 2xl:h-[740px] flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-(--color-border) text-(--color-fg-4) transition hover:border-(--color-accent)/60 hover:bg-(--color-surface)/40 hover:text-(--color-fg-2)"
       >
         <Plus className="h-6 w-6" />
         <span className="text-sm">새 메모함</span>
@@ -494,7 +495,7 @@ export function AddNotebookCard({
   }
 
   return (
-    <div className="flex h-[460px] flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border border-dashed border-(--color-accent)/60 bg-(--color-surface)/40 px-6">
+    <div className="flex h-[580px] xl:h-[660px] 2xl:h-[740px] flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border border-dashed border-(--color-accent)/60 bg-(--color-surface)/40 px-6">
       <input
         autoFocus
         value={name}
