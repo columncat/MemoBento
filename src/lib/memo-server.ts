@@ -1,7 +1,7 @@
 import { asc, desc, eq } from "drizzle-orm";
 
 import { db, schema } from "./db";
-import type { MemoType, SystemKey, ViewMode } from "./db/schema";
+import { MEMO_TYPES, type MemoType, type SystemKey, type ViewMode } from "./db/schema";
 import {
   getLegacyState,
   setLegacyState,
@@ -34,6 +34,37 @@ export const SYSTEM_NOTEBOOKS: {
   { id: "sys-corkboard", systemKey: "corkboard", name: "Corkboard", position: 0 },
   { id: "sys-memo", systemKey: "memo", name: "Memo", position: 1 },
 ];
+
+/**
+ * 메모함이 받아들이는 메모 종류.
+ *
+ * 시스템 예약 메모함은 MailBento 의 데이터 구조를 그대로 쓰기 때문에 담을 수
+ * 있는 것이 정해져 있다 — Corkboard 는 링크만, Memo 는 텍스트만. 새로 만드는
+ * 것도, 다른 메모함에서 옮겨오는 것도 이 규칙을 따른다.
+ */
+export function acceptedTypes(systemKey: SystemKey | null): MemoType[] {
+  if (systemKey === "corkboard") return ["link"];
+  if (systemKey === "memo") return ["text"];
+  return [...MEMO_TYPES];
+}
+
+export class MemoTypeNotAllowedError extends Error {
+  constructor(notebookName: string, accepted: MemoType[]) {
+    const what = accepted.includes("link") ? "링크" : "텍스트";
+    super(`"${notebookName}" 메모함에는 ${what} 메모만 넣을 수 있습니다`);
+    this.name = "MemoTypeNotAllowedError";
+  }
+}
+
+function assertAccepts(
+  nb: { name: string; systemKey: SystemKey | null },
+  type: MemoType,
+): void {
+  const accepted = acceptedTypes(nb.systemKey);
+  if (!accepted.includes(type)) {
+    throw new MemoTypeNotAllowedError(nb.name, accepted);
+  }
+}
 
 /** 이 (메모함, 메모타입) 조합이 레거시 JSON 으로 저장되는가. */
 function legacyTargetOf(
@@ -91,6 +122,7 @@ export function listNotebooks(): NotebookDTO[] {
       systemKey: nb.systemKey ?? null,
       viewMode: nb.viewMode,
       position: nb.position,
+      accepts: acceptedTypes(nb.systemKey ?? null),
       memos,
     };
   });
@@ -271,6 +303,7 @@ export interface CreateMemoInput {
 export function createMemo(input: CreateMemoInput): string {
   const nb = getNotebook(input.notebookId);
   if (!nb) throw new Error("메모함을 찾을 수 없습니다");
+  assertAccepts({ name: nb.name, systemKey: nb.systemKey ?? null }, input.type);
 
   const target = legacyTargetOf(nb.systemKey ?? null, input.type);
 
@@ -304,6 +337,14 @@ export function createMemo(input: CreateMemoInput): string {
     return id;
   }
 
+  // 새 메모는 맨 앞에. position 을 전부 0 으로 두면 정렬이 불안정해진다.
+  const minPos = db
+    .select()
+    .from(schema.memos)
+    .where(eq(schema.memos.notebookId, input.notebookId))
+    .all()
+    .reduce((m, r) => Math.min(m, r.position), 0);
+
   const id = uid();
   db.insert(schema.memos)
     .values({
@@ -315,6 +356,7 @@ export function createMemo(input: CreateMemoInput): string {
       url: input.url ?? null,
       iconUrl: input.iconUrl ?? null,
       fileId: input.fileId ?? null,
+      position: minPos - 1,
     })
     .run();
   return id;
@@ -411,6 +453,7 @@ function moveDbMemo(id: string, toNotebookId: string): void {
     .where(eq(schema.memos.id, id))
     .get();
   if (!row) return;
+  assertAccepts({ name: target.name, systemKey: target.systemKey ?? null }, row.type);
 
   const legacyTarget = legacyTargetOf(target.systemKey ?? null, row.type);
   if (!legacyTarget) {
@@ -465,6 +508,7 @@ function moveLegacyMemo(
 
   // 목적지에서도 같은 레거시 배열에 속한다면 이동할 필요가 없다.
   if (legacyTargetOf(target.systemKey ?? null, type) === from.store) return;
+  assertAccepts({ name: target.name, systemKey: target.systemKey ?? null }, type);
 
   // JSON → DB
   if (from.store === "pins") {
@@ -495,6 +539,45 @@ function moveLegacyMemo(
       })
       .run();
   }
+}
+
+/**
+ * 메모함 안에서 메모 순서 바꾸기.
+ * 시스템 메모함이면 레거시 배열 자체를 재정렬하므로 MailBento 에도 그대로 반영된다.
+ * orderedIds 에 없는 항목은 뒤에 원래 순서대로 붙인다.
+ */
+export function reorderMemos(notebookId: string, orderedIds: string[]): void {
+  const nb = getNotebook(notebookId);
+  if (!nb) throw new Error("메모함을 찾을 수 없습니다");
+
+  const rank = new Map(orderedIds.map((id, i) => [id, i]));
+  const sortByRank = <T extends { id: string }>(items: T[]): T[] =>
+    items
+      .map((item, i) => ({ item, i }))
+      .sort((a, b) => {
+        const ra = rank.get(a.item.id);
+        const rb = rank.get(b.item.id);
+        if (ra != null && rb != null) return ra - rb;
+        if (ra != null) return -1; // 지정된 것이 앞
+        if (rb != null) return 1;
+        return a.i - b.i; // 둘 다 미지정이면 원래 순서 유지
+      })
+      .map((x) => x.item);
+
+  if (nb.systemKey === "corkboard" || nb.systemKey === "memo") {
+    const state = getLegacyState();
+    if (nb.systemKey === "corkboard") state.pins = sortByRank(state.pins);
+    else state.memos = sortByRank(state.memos);
+    setLegacyState(state);
+    return;
+  }
+
+  orderedIds.forEach((id, i) => {
+    db.update(schema.memos)
+      .set({ position: i, updatedAt: new Date() })
+      .where(eq(schema.memos.id, id))
+      .run();
+  });
 }
 
 /** 메모 삭제. 지워야 할 파일 경로들을 돌려준다 (호출부에서 unlink). */

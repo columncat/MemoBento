@@ -19,6 +19,7 @@ import { useRef, useState } from "react";
 import { activeMemoDrag } from "@/lib/dnd";
 import {
   MEMO_DND_TYPE,
+  acceptsFiles,
   looksLikeUrl,
   type MemoDragPayload,
   type NotebookDTO,
@@ -35,6 +36,8 @@ export interface NotebookHandlers {
   addFiles: (notebookId: string, files: File[]) => Promise<void>;
   /** 메모를 다른 메모함으로 이동. */
   moveMemo: (memoId: string, toNotebookId: string) => Promise<void>;
+  /** 사용자에게 알릴 메시지 (받을 수 없는 항목을 떨어뜨린 경우 등). */
+  notify: (message: string) => void;
   setViewMode: (notebookId: string, mode: ViewMode) => void;
   rename: (notebookId: string, name: string) => void;
   remove: (notebookId: string) => void;
@@ -67,14 +70,35 @@ export function NotebookCard({
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const locked = !!notebook.systemKey;
+  const canLink = notebook.accepts.includes("link");
+  const canText = notebook.accepts.includes("text");
+  const canFiles = acceptsFiles(notebook);
 
-  // ─ 메모 추가 (URL 처럼 보이면 링크 메모, 아니면 텍스트 메모) ─
+  const placeholder = canLink && canText
+    ? "메모 또는 URL 입력 후 Enter"
+    : canLink
+      ? "URL 입력 후 Enter"
+      : "메모 입력 후 Enter";
+
+  /**
+   * 입력 한 줄을 메모로. 메모함이 받는 종류에 따라 해석이 달라진다.
+   *  - 둘 다 받으면: URL 처럼 보이면 링크, 아니면 텍스트
+   *  - 링크만 받으면(Corkboard): URL 이 아니면 거절
+   *  - 텍스트만 받으면(Memo): URL 이라도 텍스트로 저장
+   */
   const submit = async () => {
     const value = input.trim();
     if (!value) return;
+
+    if (canLink && !canText && !looksLikeUrl(value)) {
+      handlers.notify(`"${notebook.name}" 메모함에는 URL 만 넣을 수 있습니다`);
+      return;
+    }
+
     setInput("");
     try {
-      if (looksLikeUrl(value)) await handlers.addLink(notebook.id, value);
+      const asLink = canLink && (!canText || looksLikeUrl(value));
+      if (asLink) await handlers.addLink(notebook.id, value);
       else await handlers.addText(notebook.id, value);
     } catch {
       setInput(value); // 실패하면 입력 복구
@@ -104,6 +128,12 @@ export function NotebookCard({
       try {
         const p = JSON.parse(memoRaw) as MemoDragPayload;
         if (p.notebookId === notebook.id) return; // 제자리
+        if (!notebook.accepts.includes(p.type)) {
+          handlers.notify(
+            `"${notebook.name}" 메모함은 ${canLink ? "링크" : "텍스트"} 메모만 받습니다`,
+          );
+          return;
+        }
         await handlers.moveMemo(p.id, notebook.id);
       } catch {
         /* 손상된 페이로드 무시 */
@@ -114,28 +144,44 @@ export function NotebookCard({
     // 2) 파일
     const files = Array.from(e.dataTransfer.files ?? []);
     if (files.length > 0) {
+      if (!canFiles) {
+        handlers.notify(
+          `"${notebook.name}" 메모함에는 파일을 넣을 수 없습니다 (${canLink ? "링크" : "텍스트"} 전용)`,
+        );
+        return;
+      }
       await takeFiles(files);
       return;
     }
 
-    // 3) 그 외엔 URL / 텍스트로 처리
+    // 3) 그 외엔 URL / 텍스트로 처리 (입력창과 같은 규칙)
     const uri = e.dataTransfer.getData("text/uri-list").trim();
     const text = e.dataTransfer.getData("text/plain").trim();
     const payload = uri || text;
     if (!payload) return;
-    if (looksLikeUrl(payload)) await handlers.addLink(notebook.id, payload);
-    else await handlers.addText(notebook.id, payload);
+    if (canLink && !canText && !looksLikeUrl(payload)) {
+      handlers.notify(`"${notebook.name}" 메모함에는 URL 만 넣을 수 있습니다`);
+      return;
+    }
+    if (canLink && (!canText || looksLikeUrl(payload))) {
+      await handlers.addLink(notebook.id, payload);
+    } else {
+      await handlers.addText(notebook.id, payload);
+    }
   };
 
   /**
    * 이 드래그를 이 카드가 받는가.
-   * 자기 메모함에서 나온 메모는 제자리이므로 받지 않는다 (오버레이도 안 뜸).
+   * 자기 메모함에서 나온 메모(제자리)나 받을 수 없는 종류면 오버레이도 띄우지 않는다.
    */
   const accepts = (e: React.DragEvent) => {
     if (e.dataTransfer.types.includes(MEMO_DND_TYPE)) {
-      return activeMemoDrag()?.notebookId !== notebook.id;
+      const d = activeMemoDrag();
+      if (!d || d.notebookId === notebook.id) return false;
+      return notebook.accepts.includes(d.type);
     }
-    return e.dataTransfer.types.includes("Files");
+    if (e.dataTransfer.types.includes("Files")) return canFiles;
+    return false;
   };
 
   const saveName = () => {
@@ -280,15 +326,17 @@ export function NotebookCard({
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className={iconBtn}
-            aria-label="파일 추가"
-            title="파일 추가 (드래그해서 놓아도 됩니다)"
-          >
-            <Paperclip className="h-3.5 w-3.5" />
-          </button>
+          {canFiles && (
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              className={iconBtn}
+              aria-label="파일 추가"
+              title="파일 추가 (드래그해서 놓아도 됩니다)"
+            >
+              <Paperclip className="h-3.5 w-3.5" />
+            </button>
+          )}
 
           {!flush && (
             <button
@@ -351,7 +399,7 @@ export function NotebookCard({
               void submit();
             }
           }}
-          placeholder="메모 또는 URL 입력 후 Enter"
+          placeholder={placeholder}
           maxLength={20000}
           rows={2}
           className="scrollbar-thin flex-1 resize-none rounded-lg bg-(--color-bg-2) px-3 py-2 text-sm leading-relaxed text-(--color-fg) ring-1 ring-(--color-border-soft) outline-none placeholder:text-(--color-fg-4) focus:ring-(--color-accent)/60"
@@ -371,7 +419,13 @@ export function NotebookCard({
           memos={notebook.memos}
           viewMode={notebook.viewMode}
           actions={memoActions}
-          emptyHint="메모를 입력하거나 파일을 끌어다 놓으세요"
+          emptyHint={
+            canFiles
+              ? "메모를 입력하거나 파일을 끌어다 놓으세요"
+              : canLink
+                ? "링크만 담는 메모함입니다"
+                : "텍스트 메모만 담는 메모함입니다"
+          }
         />
       </div>
 

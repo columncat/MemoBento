@@ -56,6 +56,9 @@ export const api = {
 
   deleteMemo: (id: string) =>
     mutate(`/api/memos/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+  reorderMemos: (notebookId: string, orderedIds: string[]) =>
+    mutate("/api/memos/reorder", jsonInit("POST", { notebookId, orderedIds })),
 };
 
 /**

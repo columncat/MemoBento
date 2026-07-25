@@ -14,6 +14,7 @@ import {
   writeThumbFromDataUrl,
 } from "@/lib/file-store";
 import {
+  acceptedTypes,
   createMemo,
   getNotebook,
   listNotebooks,
@@ -41,9 +42,23 @@ export async function POST(req: Request) {
   }
 
   const notebookId = String(form.get("notebookId") ?? "");
-  if (!notebookId || !getNotebook(notebookId)) {
+  const notebook = notebookId ? getNotebook(notebookId) : undefined;
+  if (!notebook) {
     return NextResponse.json(
       { error: "메모함을 찾을 수 없습니다" },
+      { status: 400 },
+    );
+  }
+
+  // 시스템 예약 메모함은 링크/텍스트만 담는다 — 바이트를 읽기 전에 거른다
+  const accepted = acceptedTypes(notebook.systemKey ?? null);
+  if (!accepted.some((t) => t === "image" || t === "pdf" || t === "file")) {
+    return NextResponse.json(
+      {
+        error: `"${notebook.name}" 메모함에는 파일을 넣을 수 없습니다 (${
+          accepted.includes("link") ? "링크" : "텍스트"
+        } 전용)`,
+      },
       { status: 400 },
     );
   }

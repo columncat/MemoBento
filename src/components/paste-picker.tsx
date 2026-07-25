@@ -1,9 +1,14 @@
 "use client";
 
 import { ClipboardPaste, Lock, X } from "lucide-react";
-import { useEffect } from "react";
+import { useEffect, useMemo } from "react";
 
-import { looksLikeUrl, type NotebookDTO } from "@/lib/types";
+import {
+  acceptsFiles,
+  looksLikeUrl,
+  type MemoType,
+  type NotebookDTO,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 export type PendingPaste =
@@ -25,19 +30,29 @@ export function PastePicker({
   onPick: (notebookId: string) => void;
   onCancel: () => void;
 }) {
+  /** 붙여넣은 것을 받을 수 있는 메모함만 고를 수 있다. */
+  const targets = useMemo(() => {
+    if (!pending) return [];
+    if (pending.kind === "files") return notebooks.filter(acceptsFiles);
+    const needed: MemoType = looksLikeUrl(pending.text) ? "link" : "text";
+    return notebooks.filter(
+      (n) => n.accepts.includes(needed) || n.accepts.includes("text"),
+    );
+  }, [pending, notebooks]);
+
   useEffect(() => {
     if (!pending) return;
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") onCancel();
       // 1~9 로 빠르게 선택
       const n = Number(e.key);
-      if (Number.isInteger(n) && n >= 1 && n <= Math.min(9, notebooks.length)) {
-        onPick(notebooks[n - 1].id);
+      if (Number.isInteger(n) && n >= 1 && n <= Math.min(9, targets.length)) {
+        onPick(targets[n - 1].id);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [pending, notebooks, onPick, onCancel]);
+  }, [pending, targets, onPick, onCancel]);
 
   if (!pending) return null;
 
@@ -91,8 +106,14 @@ export function PastePicker({
           </button>
         </div>
 
+        {targets.length === 0 && (
+          <p className="rounded-lg border border-dashed border-(--color-border) px-3 py-4 text-center text-xs break-keep text-(--color-fg-4)">
+            이걸 받을 수 있는 메모함이 없습니다 — 먼저 메모함을 만드세요
+          </p>
+        )}
+
         <ul className="scrollbar-thin flex max-h-[40vh] flex-col gap-1 overflow-y-auto">
-          {notebooks.map((nb, i) => (
+          {targets.map((nb, i) => (
             <li key={nb.id}>
               <button
                 type="button"

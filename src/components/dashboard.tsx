@@ -167,10 +167,16 @@ export function Dashboard({
       const p = pending;
       setPending(null);
       if (!p) return;
+      const nb = notebooks.find((n) => n.id === notebookId);
       try {
         if (p.kind === "files") {
           setNotebooks(await uploadFiles(notebookId, p.files));
-        } else if (looksLikeUrl(p.text)) {
+          return;
+        }
+        // 대상이 받는 종류에 맞춘다 — 텍스트 전용 메모함이면 URL 도 텍스트로
+        const canLink = nb?.accepts.includes("link") ?? true;
+        const canText = nb?.accepts.includes("text") ?? true;
+        if (canLink && (!canText || looksLikeUrl(p.text))) {
           setNotebooks(await api.createLinkMemo(notebookId, p.text));
         } else {
           setNotebooks(await api.createTextMemo(notebookId, p.text));
@@ -179,7 +185,7 @@ export function Dashboard({
         fail(e);
       }
     },
-    [pending, fail],
+    [pending, fail, notebooks],
   );
 
   // ─ 메모함 조작 ─
@@ -190,6 +196,7 @@ export function Dashboard({
       addFiles: (id, files) => run(() => uploadFiles(id, files)),
       moveMemo: (memoId, toNotebookId) =>
         run(() => api.updateMemo(memoId, { notebookId: toNotebookId })),
+      notify: (message) => fail(new Error(message)),
       setViewMode: (id, mode: ViewMode) => {
         // 낙관적 반영 — 토글 반응이 즉시 보이도록
         setNotebooks((prev) =>
@@ -215,7 +222,7 @@ export function Dashboard({
       },
       expand: (nb) => setExpandedId(nb.id),
     }),
-    [run, notebooks, expandedId],
+    [run, fail, notebooks, expandedId],
   );
 
   // ─ 메모 조작 ─
@@ -238,8 +245,29 @@ export function Dashboard({
         if (!confirm("이 메모를 삭제할까요?")) return;
         void run(() => api.deleteMemo(memo.id)).catch(() => undefined);
       },
+      onDropOnMemo: (payload, target) => {
+        // 같은 메모함 안 → 순서 변경 (끌어온 것을 대상 **앞**에 끼워 넣는다)
+        if (payload.notebookId !== target.notebookId) return;
+        const nb = notebooks.find((n) => n.id === target.notebookId);
+        if (!nb) return;
+        const ids = nb.memos.map((m) => m.id).filter((id) => id !== payload.id);
+        const at = ids.indexOf(target.id);
+        if (at < 0) return;
+        ids.splice(at, 0, payload.id);
+
+        // 낙관적 반영 — 드롭 즉시 자리가 잡히게
+        const byId = new Map(nb.memos.map((m) => [m.id, m]));
+        setNotebooks((prev) =>
+          prev.map((n) =>
+            n.id === nb.id
+              ? { ...n, memos: ids.map((id) => byId.get(id)!).filter(Boolean) }
+              : n,
+          ),
+        );
+        void run(() => api.reorderMemos(nb.id, ids)).catch(() => undefined);
+      },
     }),
-    [run],
+    [run, notebooks],
   );
 
   const viewerMemo = useMemo(() => {

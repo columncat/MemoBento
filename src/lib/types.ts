@@ -50,7 +50,22 @@ export interface NotebookDTO {
   systemKey: SystemKey | null;
   viewMode: ViewMode;
   position: number;
+  /**
+   * 이 메모함이 받는 메모 종류.
+   * 시스템 메모함은 MailBento 자료구조를 그대로 쓰므로 제한된다 —
+   * Corkboard 는 링크만, Memo 는 텍스트만.
+   */
+  accepts: MemoType[];
   memos: MemoDTO[];
+}
+
+/** 이 메모함이 파일(이미지/PDF/일반)을 받을 수 있는가. */
+export function acceptsFiles(nb: Pick<NotebookDTO, "accepts">): boolean {
+  return (
+    nb.accepts.includes("image") ||
+    nb.accepts.includes("pdf") ||
+    nb.accepts.includes("file")
+  );
 }
 
 /**
@@ -63,6 +78,8 @@ export const MEMO_DND_TYPE = "application/x-memobento-memo";
 export interface MemoDragPayload {
   id: string;
   notebookId: string;
+  /** 대상 메모함이 받을 수 있는지 dragover 시점에 판정하기 위해 함께 싣는다. */
+  type: MemoType;
 }
 
 /** 파일 원본 URL. dl=true 면 다운로드(attachment). */

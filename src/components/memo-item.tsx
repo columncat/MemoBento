@@ -11,8 +11,9 @@ import {
   StickyNote,
   Trash2,
 } from "lucide-react";
+import { useState } from "react";
 
-import { beginMemoDrag, endMemoDrag } from "@/lib/dnd";
+import { activeMemoDrag, beginMemoDrag, endMemoDrag } from "@/lib/dnd";
 import {
   MEMO_DND_TYPE,
   fileUrl,
@@ -21,6 +22,7 @@ import {
   thumbUrl,
   formatBytes,
   type MemoDTO,
+  type MemoDragPayload,
 } from "@/lib/types";
 import { cn, formatRelativeTime } from "@/lib/utils";
 
@@ -28,6 +30,8 @@ export interface MemoActions {
   onOpen: (memo: MemoDTO) => void;
   onEdit: (memo: MemoDTO) => void;
   onDelete: (memo: MemoDTO) => void;
+  /** 다른 메모를 이 메모 위에 떨어뜨렸을 때 (같은 메모함이면 순서 변경). */
+  onDropOnMemo: (payload: MemoDragPayload, target: MemoDTO) => void;
 }
 
 /** 메모 종류 아이콘 — 썸네일이 없을 때 대신 보여준다. */
@@ -49,10 +53,7 @@ export function MemoIcon({
 
 /** 썸네일 또는 아이콘/파비콘. */
 function Thumb({ memo, size }: { memo: MemoDTO; size: "sm" | "lg" }) {
-  const box =
-    size === "sm"
-      ? "h-10 w-10 rounded-md"
-      : "h-full w-full rounded-none";
+  const box = size === "sm" ? "h-10 w-10 rounded-md" : "h-full w-full rounded-none";
 
   if (memo.type === "link" && memo.iconUrl) {
     return (
@@ -170,30 +171,84 @@ function ActionButtons({
 }
 
 /**
- * 항목 전체를 클릭/키보드로 열 수 있게 하고, 다른 메모함으로 끌어 옮길 수 있게 하는 공통 props.
+ * 항목을 클릭/키보드로 열고, 끌어서 옮기고, 다른 메모를 받아 순서를 바꾸는 공통 props.
+ *
+ * 같은 메모함 안에서 떨어뜨리면 순서 변경, 다른 메모함이면 이동이다.
+ * 판정에 필요한 출처 정보는 dragover 중 DataTransfer 값을 읽을 수 없어
+ * lib/dnd 의 모듈 상태로 본다.
  */
-function openTriggerProps(memo: MemoDTO, actions: MemoActions) {
+function useItemDnd(memo: MemoDTO, actions: MemoActions) {
+  const [over, setOver] = useState<false | "self" | "reject">(false);
+
+  const dragged = () => activeMemoDrag();
+  const relevant = (e: React.DragEvent) =>
+    e.dataTransfer.types.includes(MEMO_DND_TYPE);
+
   return {
-    role: "button" as const,
-    tabIndex: 0,
-    "aria-label": memoLabel(memo) || "메모 열기",
-    draggable: true,
-    onDragStart: (e: React.DragEvent) => {
-      const payload = { id: memo.id, notebookId: memo.notebookId };
-      e.dataTransfer.effectAllowed = "move";
-      e.dataTransfer.setData(MEMO_DND_TYPE, JSON.stringify(payload));
-      // 앱 밖으로 떨어뜨렸을 때를 위한 최소한의 대체 표현
-      e.dataTransfer.setData("text/plain", memoLabel(memo));
-      beginMemoDrag(payload);
-    },
-    onDragEnd: () => endMemoDrag(),
-    onClick: () => actions.onOpen(memo),
-    onKeyDown: (e: React.KeyboardEvent) => {
-      if (e.target !== e.currentTarget) return; // 내부 버튼의 Enter 는 그대로
-      if (e.key === "Enter" || e.key === " ") {
+    over,
+    props: {
+      role: "button" as const,
+      tabIndex: 0,
+      "aria-label": memoLabel(memo) || "메모 열기",
+      draggable: true,
+
+      onDragStart: (e: React.DragEvent) => {
+        const payload: MemoDragPayload = {
+          id: memo.id,
+          notebookId: memo.notebookId,
+          type: memo.type,
+        };
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData(MEMO_DND_TYPE, JSON.stringify(payload));
+        // 앱 밖으로 떨어뜨렸을 때를 위한 최소한의 대체 표현
+        e.dataTransfer.setData("text/plain", memoLabel(memo));
+        beginMemoDrag(payload);
+      },
+      onDragEnd: () => {
+        endMemoDrag();
+        setOver(false);
+      },
+
+      onDragOver: (e: React.DragEvent) => {
+        if (!relevant(e)) return;
+        const d = dragged();
+        if (!d || d.id === memo.id) return;
+        // 같은 메모함일 때만 항목 위 드롭(=순서 변경)을 받는다.
+        // 다른 메모함이면 카드 전체가 처리하도록 그대로 흘려보낸다.
+        if (d.notebookId !== memo.notebookId) return;
         e.preventDefault();
-        actions.onOpen(memo);
-      }
+        e.stopPropagation();
+        e.dataTransfer.dropEffect = "move";
+        setOver("self");
+      },
+      onDragLeave: () => setOver(false),
+
+      onDrop: (e: React.DragEvent) => {
+        if (!relevant(e)) return;
+        const raw = e.dataTransfer.getData(MEMO_DND_TYPE);
+        setOver(false);
+        if (!raw) return;
+        let payload: MemoDragPayload;
+        try {
+          payload = JSON.parse(raw) as MemoDragPayload;
+        } catch {
+          return;
+        }
+        if (payload.notebookId !== memo.notebookId) return; // 카드가 처리
+        e.preventDefault();
+        e.stopPropagation();
+        if (payload.id === memo.id) return;
+        actions.onDropOnMemo(payload, memo);
+      },
+
+      onClick: () => actions.onOpen(memo),
+      onKeyDown: (e: React.KeyboardEvent) => {
+        if (e.target !== e.currentTarget) return; // 내부 버튼의 Enter 는 그대로
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          actions.onOpen(memo);
+        }
+      },
     },
   };
 }
@@ -221,11 +276,16 @@ export function MemoRow({
 }) {
   const label = memoLabel(memo);
   const sub = subtitleOf(memo);
+  const { over, props } = useItemDnd(memo, actions);
 
   return (
     <li
-      className="group flex cursor-pointer items-start gap-2.5 rounded-lg bg-(--color-bg-2) p-2.5 ring-1 ring-(--color-border-soft) transition hover:bg-(--color-surface-hi) focus-visible:ring-(--color-accent)"
-      {...openTriggerProps(memo, actions)}
+      {...props}
+      className={cn(
+        "group flex cursor-pointer items-start gap-2.5 rounded-lg bg-(--color-bg-2) p-2.5 ring-1 ring-(--color-border-soft) transition hover:bg-(--color-surface-hi) focus-visible:ring-(--color-accent)",
+        // 여기에 놓으면 이 항목 **앞**으로 들어간다
+        over === "self" && "border-t-2 border-(--color-accent) pt-2",
+      )}
     >
       <Thumb memo={memo} size="sm" />
 
@@ -235,9 +295,7 @@ export function MemoRow({
             <p className="line-clamp-3 break-words whitespace-pre-wrap text-sm leading-relaxed text-(--color-fg-2)">
               {memo.text}
             </p>
-            <p className="mt-1 font-mono text-[10.5px] text-(--color-fg-4)">
-              {sub}
-            </p>
+            <p className="mt-1 font-mono text-[10.5px] text-(--color-fg-4)">{sub}</p>
           </>
         ) : (
           <>
@@ -266,11 +324,15 @@ export function MemoTile({
   actions: MemoActions;
 }) {
   const label = memoLabel(memo);
+  const { over, props } = useItemDnd(memo, actions);
 
   return (
     <li
-      className="group relative flex cursor-pointer flex-col overflow-hidden rounded-lg bg-(--color-bg-2) ring-1 ring-(--color-border-soft) transition hover:ring-(--color-accent)/50 focus-visible:ring-(--color-accent)"
-      {...openTriggerProps(memo, actions)}
+      {...props}
+      className={cn(
+        "group relative flex cursor-pointer flex-col overflow-hidden rounded-lg bg-(--color-bg-2) ring-1 ring-(--color-border-soft) transition hover:ring-(--color-accent)/50 focus-visible:ring-(--color-accent)",
+        over === "self" && "border-l-2 border-(--color-accent)",
+      )}
     >
       <div className="relative aspect-4/3 w-full overflow-hidden">
         {memo.type === "text" ? (
@@ -285,10 +347,7 @@ export function MemoTile({
 
       <div className="border-t border-(--color-border-soft) px-2 py-1.5">
         <div className="flex items-center gap-1.5">
-          <MemoIcon
-            memo={memo}
-            className="h-3 w-3 shrink-0 text-(--color-fg-4)"
-          />
+          <MemoIcon memo={memo} className="h-3 w-3 shrink-0 text-(--color-fg-4)" />
           <span className="truncate text-[11.5px] text-(--color-fg-2)">
             {memo.type === "text"
               ? formatRelativeTime(memo.createdAt) || "메모"
@@ -297,9 +356,7 @@ export function MemoTile({
         </div>
         {memo.type !== "text" && (
           <div className="truncate font-mono text-[10px] text-(--color-fg-4)">
-            {memo.type === "link"
-              ? hostnameOf(memo.url ?? "")
-              : subtitleOf(memo)}
+            {memo.type === "link" ? hostnameOf(memo.url ?? "") : subtitleOf(memo)}
           </div>
         )}
       </div>
