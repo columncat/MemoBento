@@ -13,6 +13,12 @@ const PUBLIC_PREFIXES = [
   "/api/auth/auto-renew",
   "/_next",
   "/favicon",
+  /**
+   * 복호화 서비스 워커 스크립트.
+   * 로그인으로 리다이렉트되면 등록 자체가 실패해 암호화 파일을 열 수 없다.
+   * 스크립트에 비밀은 없고, 키는 워커가 세션 쿠키로 따로 받아온다.
+   */
+  "/sw.js",
 ];
 
 function isPublic(pathname: string): boolean {
