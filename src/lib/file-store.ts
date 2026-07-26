@@ -32,43 +32,6 @@ export function safeSegment(s: string): string {
   return s.replace(/[^\w.\-]+/g, "_").slice(0, 80);
 }
 
-/** 원본 바이트를 UPLOAD_DIR 에 쓰고 상대 경로를 돌려준다. */
-export async function writeOriginal(
-  id: string,
-  ext: string,
-  bytes: Uint8Array,
-): Promise<string> {
-  const root = await ensureUploadDir();
-  const rel = ext ? `${id}.${safeSegment(ext)}` : id;
-  await writeFile(join(root, rel), bytes);
-  return rel;
-}
-
-/** 클라이언트가 만든 썸네일 data URL 을 PNG 로 저장. 실패하면 null. */
-export async function writeThumbFromDataUrl(
-  id: string,
-  dataUrl: string,
-): Promise<string | null> {
-  const m = /^data:image\/(png|jpeg|webp);base64,([\s\S]+)$/i.exec(
-    dataUrl.trim(),
-  );
-  if (!m) return null;
-  const ext = m[1].toLowerCase() === "jpeg" ? "jpg" : m[1].toLowerCase();
-  let bytes: Buffer;
-  try {
-    bytes = Buffer.from(m[2], "base64");
-  } catch {
-    return null;
-  }
-  // 썸네일이 비정상적으로 크면(=원본을 그대로 보낸 경우) 저장하지 않는다.
-  if (bytes.length === 0 || bytes.length > 2_000_000) return null;
-
-  const root = await ensureUploadDir();
-  const rel = `${id}.thumb.${ext}`;
-  await writeFile(join(root, rel), bytes);
-  return rel;
-}
-
 /**
  * 브라우저가 암호화해 보낸 썸네일 레코드를 그대로 저장한다.
  * 서버는 내용을 알지 못한다 — 미리보기 이미지도 평문으로 남기지 않기 위함.
@@ -187,4 +150,3 @@ export function parseRange(
   return { start, end };
 }
 
-export const maxUploadBytes = () => env.MAX_UPLOAD_MB * 1024 * 1024;
