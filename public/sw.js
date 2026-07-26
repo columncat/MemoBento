@@ -43,7 +43,8 @@ function getKey() {
  * 고정 길이 레코드를 모아 하나씩 복호화해 흘려보내는 변환 스트림.
  * 마지막 레코드는 짧을 수 있다.
  */
-function decryptStream(key, recordSize) {
+function decryptStream(key, recordSize, expectedPlainSize) {
+  let produced = 0;
   // 들어온 조각을 모아만 두고, 레코드 하나가 찼을 때만 이어붙인다.
   // 조각마다 전체 버퍼를 복사하면 8MB 레코드당 수백 번 복사가 되어
   // 수 GB 파일에서는 사실상 끝나지 않는다.
@@ -75,6 +76,7 @@ function decryptStream(key, recordSize) {
     const iv = record.subarray(0, IV_LEN);
     const ct = record.subarray(IV_LEN);
     const plain = await crypto.subtle.decrypt({ name: "AES-GCM", iv }, key, ct);
+    produced += plain.byteLength;
     controller.enqueue(new Uint8Array(plain));
   };
 
@@ -87,9 +89,17 @@ function decryptStream(key, recordSize) {
       }
     },
     async flush(controller) {
-      if (pendingLen === 0) return;
-      if (pendingLen <= GCM_OVERHEAD) throw new Error("잘린 암호문");
-      await decryptOne(take(pendingLen), controller);
+      if (pendingLen > 0) {
+        if (pendingLen <= GCM_OVERHEAD) throw new Error("잘린 암호문");
+        await decryptOne(take(pendingLen), controller);
+      }
+      // 업스트림이 레코드 경계에서 일찍 끊기면 복호화는 조용히 성공한다.
+      // 그대로 두면 짧은 파일이 "정상 다운로드"로 저장되므로 반드시 길이를 확인한다.
+      if (expectedPlainSize > 0 && produced !== expectedPlainSize) {
+        throw new Error(
+          "길이 불일치: " + produced + " / " + expectedPlainSize + " — 전송이 잘렸습니다",
+        );
+      }
     },
   });
 }
@@ -144,6 +154,7 @@ async function serve(fileId, wantsDownload, request) {
   // 처음부터 스트리밍해서 내려준다 (브라우저 다운로드 관리자가 이어서 처리).
   const upstream = await fetch(`/api/files/${encodeURIComponent(fileId)}`, {
     credentials: "same-origin",
+    cache: "no-store",
     headers: request.headers.get("accept")
       ? { accept: request.headers.get("accept") }
       : undefined,
@@ -187,7 +198,7 @@ async function serve(fileId, wantsDownload, request) {
   try {
     const key = await getKey();
     const body = upstream.body.pipeThrough(
-      decryptStream(key, chunkSize + GCM_OVERHEAD),
+      decryptStream(key, chunkSize + GCM_OVERHEAD, Number(plainSize || 0)),
     );
     return new Response(body, { status: 200, headers });
   } catch (e) {

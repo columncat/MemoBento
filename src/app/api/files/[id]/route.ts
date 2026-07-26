@@ -59,7 +59,11 @@ export async function GET(
     "Content-Disposition": `${wantsDownload ? "attachment" : "inline"}; ${encodeDispositionFilename(row.name)}`,
     "Content-Security-Policy": cspFor(row.name),
     "X-Content-Type-Options": "nosniff",
-    "Cache-Control": "private, max-age=31536000, immutable",
+    // 암호문은 캐시하지 않는다. 수 GB 응답이 HTTP 캐시에 앉으면 잘린 항목이
+    // 재사용되어 조용히 짧은 파일이 만들어질 수 있다. 평문(레거시)만 캐시한다.
+    "Cache-Control": encrypted
+      ? "no-store"
+      : "private, max-age=31536000, immutable",
     "X-MB-Encrypted": encrypted ? "1" : "0",
     "X-MB-Chunk-Size": String(row.chunkSize),
     "X-MB-Plain-Size": String(row.size),
