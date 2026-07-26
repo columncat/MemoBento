@@ -1,6 +1,7 @@
 import { createReadStream } from "node:fs";
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { isAbsolute, join, resolve, sep } from "node:path";
+import { Readable } from "node:stream";
 
 import { env } from "./env";
 
@@ -110,21 +111,11 @@ export async function openStored(
     range = { start, end };
   }
 
+  // Readable.toWeb 은 배압을 지켜준다 — 소비자가 느리면 읽기를 멈춘다.
+  // 직접 'data' 이벤트를 enqueue 하면 파일 전체가 메모리 큐에 쌓여
+  // 큰 파일(수 GB)에서 프로세스가 터진다.
   const nodeStream = createReadStream(abs, opts);
-  const body = new ReadableStream({
-    start(controller) {
-      nodeStream.on("data", (chunk) => {
-        controller.enqueue(
-          typeof chunk === "string" ? new TextEncoder().encode(chunk) : chunk,
-        );
-      });
-      nodeStream.on("end", () => controller.close());
-      nodeStream.on("error", (err) => controller.error(err));
-    },
-    cancel() {
-      nodeStream.destroy();
-    },
-  });
+  const body = Readable.toWeb(nodeStream) as unknown as ReadableStream;
   return { body, size, totalSize, range: range ?? null };
 }
 

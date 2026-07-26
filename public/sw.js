@@ -44,13 +44,31 @@ function getKey() {
  * 마지막 레코드는 짧을 수 있다.
  */
 function decryptStream(key, recordSize) {
-  let buf = new Uint8Array(0);
+  // 들어온 조각을 모아만 두고, 레코드 하나가 찼을 때만 이어붙인다.
+  // 조각마다 전체 버퍼를 복사하면 8MB 레코드당 수백 번 복사가 되어
+  // 수 GB 파일에서는 사실상 끝나지 않는다.
+  let pending = [];
+  let pendingLen = 0;
 
-  const append = (chunk) => {
-    const next = new Uint8Array(buf.byteLength + chunk.byteLength);
-    next.set(buf, 0);
-    next.set(chunk, buf.byteLength);
-    buf = next;
+  /** 앞에서 n 바이트를 떼어 하나의 Uint8Array 로 만든다. */
+  const take = (n) => {
+    const out = new Uint8Array(n);
+    let off = 0;
+    while (off < n) {
+      const head = pending[0];
+      const need = n - off;
+      if (head.byteLength <= need) {
+        out.set(head, off);
+        off += head.byteLength;
+        pending.shift();
+      } else {
+        out.set(head.subarray(0, need), off);
+        pending[0] = head.subarray(need);
+        off += need;
+      }
+    }
+    pendingLen -= n;
+    return out;
   };
 
   const decryptOne = async (record, controller) => {
@@ -62,19 +80,16 @@ function decryptStream(key, recordSize) {
 
   return new TransformStream({
     async transform(chunk, controller) {
-      append(chunk);
-      while (buf.byteLength >= recordSize) {
-        const record = buf.subarray(0, recordSize);
-        buf = buf.subarray(recordSize);
-        await decryptOne(record, controller);
+      pending.push(chunk);
+      pendingLen += chunk.byteLength;
+      while (pendingLen >= recordSize) {
+        await decryptOne(take(recordSize), controller);
       }
     },
     async flush(controller) {
-      if (buf.byteLength === 0) return;
-      if (buf.byteLength <= GCM_OVERHEAD) {
-        throw new Error("잘린 암호문");
-      }
-      await decryptOne(buf, controller);
+      if (pendingLen === 0) return;
+      if (pendingLen <= GCM_OVERHEAD) throw new Error("잘린 암호문");
+      await decryptOne(take(pendingLen), controller);
     },
   });
 }
