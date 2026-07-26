@@ -26,11 +26,72 @@ export const COLUMNS = ["auto", "1", "2", "3", "4", "5", "6"] as const;
 export type ColumnsPref = (typeof COLUMNS)[number];
 export const DEFAULT_COLUMNS: ColumnsPref = "auto";
 
+/**
+ * 메모를 지울 때 확인창을 얼마나 자주 띄울지.
+ * 삭제해도 30일 휴지통에 남기 때문에 "묻지 않음" 도 안전한 선택이다.
+ */
+export const DELETE_CONFIRM = ["always", "daily", "never"] as const;
+export type DeleteConfirmPref = (typeof DELETE_CONFIRM)[number];
+export const DEFAULT_DELETE_CONFIRM: DeleteConfirmPref = "daily";
+
+export const DELETE_CONFIRM_LABEL: Record<DeleteConfirmPref, string> = {
+  always: "매번",
+  daily: "하루 한 번",
+  never: "묻지 않음",
+};
+
 export const STORAGE_KEYS = {
   theme: "memobento.theme",
   mode: "memobento.mode",
   columns: "memobento.columns",
+  deleteConfirm: "memobento.deleteConfirm",
+  /** 마지막으로 확인창을 띄운 날 (YYYY-MM-DD). */
+  deleteConfirmedOn: "memobento.deleteConfirmedOn",
 } as const;
+
+function today(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+export function readDeleteConfirmPref(): DeleteConfirmPref {
+  try {
+    const v = localStorage.getItem(STORAGE_KEYS.deleteConfirm);
+    if (v && (DELETE_CONFIRM as readonly string[]).includes(v)) {
+      return v as DeleteConfirmPref;
+    }
+  } catch {
+    /* */
+  }
+  return DEFAULT_DELETE_CONFIRM;
+}
+
+/**
+ * 메모 삭제 확인. 설정에 따라 물어보거나 그냥 통과시킨다.
+ * "하루 한 번" 이면 그날 처음 지울 때만 묻는다.
+ */
+export function confirmMemoDelete(message: string): boolean {
+  const pref = readDeleteConfirmPref();
+  if (pref === "never") return true;
+  if (pref === "daily") {
+    try {
+      if (localStorage.getItem(STORAGE_KEYS.deleteConfirmedOn) === today()) {
+        return true; // 오늘은 이미 물어봤다
+      }
+    } catch {
+      /* */
+    }
+  }
+  const ok = confirm(message);
+  if (ok && pref === "daily") {
+    try {
+      localStorage.setItem(STORAGE_KEYS.deleteConfirmedOn, today());
+    } catch {
+      /* */
+    }
+  }
+  return ok;
+}
 
 /**
  * 5·6단은 xl(1280px)에서 바로 펼치면 카드 폭이 250px 아래로 떨어져 헤더가 뭉갠다.

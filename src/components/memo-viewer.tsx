@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { confirmMemoDelete } from "@/lib/preferences";
 import { useSwReady } from "@/lib/sw-client";
 import {
   formatBytes,
@@ -82,7 +83,7 @@ export function MemoViewer({ memo, onClose, onSave, onDelete }: Props) {
   };
 
   const remove = async () => {
-    if (!confirm("이 메모를 휴지통으로 옮길까요? (30일 안에 되살릴 수 있습니다)")) return;
+    if (!confirmMemoDelete("이 메모를 휴지통으로 옮길까요? (30일 안에 되살릴 수 있습니다)")) return;
     setBusy(true);
     setError(null);
     try {

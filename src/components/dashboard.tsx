@@ -35,6 +35,7 @@ import {
   COLUMN_CLASS,
   DEFAULT_COLUMNS,
   STORAGE_KEYS,
+  confirmMemoDelete,
   type ColumnsPref,
 } from "@/lib/preferences";
 import {
@@ -289,7 +290,7 @@ export function Dashboard({
       },
       onEdit: (memo) => setViewerId(memo.id),
       onDelete: (memo) => {
-        if (!confirm("이 메모를 휴지통으로 옮길까요? (30일 안에 되살릴 수 있습니다)")) return;
+        if (!confirmMemoDelete("이 메모를 휴지통으로 옮길까요? (30일 안에 되살릴 수 있습니다)")) return;
         void run(() => api.deleteMemo(memo.id)).catch(() => undefined);
       },
       onDropOnMemo: (payload, target) => {

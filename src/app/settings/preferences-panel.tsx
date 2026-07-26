@@ -5,14 +5,19 @@ import { useEffect, useState } from "react";
 
 import {
   COLUMNS,
+  DELETE_CONFIRM,
+  DELETE_CONFIRM_LABEL,
   DEFAULT_COLUMNS,
+  DEFAULT_DELETE_CONFIRM,
   DEFAULT_MODE,
   DEFAULT_THEME,
   MODES,
   STORAGE_KEYS,
   THEMES,
   applyThemeAndModeToHtml,
+  readDeleteConfirmPref,
   type ColumnsPref,
+  type DeleteConfirmPref,
   type ModePref,
   type ThemeKey,
 } from "@/lib/preferences";
@@ -22,6 +27,8 @@ export function PreferencesPanel() {
   const [theme, setTheme] = useState<ThemeKey>(DEFAULT_THEME);
   const [mode, setMode] = useState<ModePref>(DEFAULT_MODE);
   const [columns, setColumns] = useState<ColumnsPref>(DEFAULT_COLUMNS);
+  const [delConfirm, setDelConfirm] =
+    useState<DeleteConfirmPref>(DEFAULT_DELETE_CONFIRM);
 
   useEffect(() => {
     try {
@@ -31,6 +38,7 @@ export function PreferencesPanel() {
       if (t) setTheme(t);
       if (m) setMode(m);
       if (c) setColumns(c);
+      setDelConfirm(readDeleteConfirmPref());
     } catch {
       /* */
     }
@@ -54,6 +62,17 @@ export function PreferencesPanel() {
     }
     applyThemeAndModeToHtml(theme, m);
   };
+  const onDeleteConfirm = (v: DeleteConfirmPref) => {
+    setDelConfirm(v);
+    try {
+      localStorage.setItem(STORAGE_KEYS.deleteConfirm, v);
+      // 규칙을 바꾸면 "오늘 이미 물어봤음" 기록도 지워 새 규칙이 바로 적용되게 한다
+      localStorage.removeItem(STORAGE_KEYS.deleteConfirmedOn);
+    } catch {
+      /* */
+    }
+  };
+
   const onColumns = (c: ColumnsPref) => {
     setColumns(c);
     try {
@@ -134,7 +153,7 @@ export function PreferencesPanel() {
       </div>
 
       {/* 열 개수 */}
-      <div>
+      <div className="mb-5">
         <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-(--color-fg-4)">
           메모함 열 개수
         </div>
@@ -155,6 +174,34 @@ export function PreferencesPanel() {
             </button>
           ))}
         </div>
+      </div>
+
+      {/* 메모 삭제 확인 */}
+      <div>
+        <div className="mb-2 text-[11px] font-medium uppercase tracking-wider text-(--color-fg-4)">
+          메모 삭제 확인
+        </div>
+        <div className="flex gap-1.5">
+          {DELETE_CONFIRM.map((v) => (
+            <button
+              key={v}
+              type="button"
+              onClick={() => onDeleteConfirm(v)}
+              className={cn(
+                "flex-1 rounded-md py-1.5 text-xs font-medium transition",
+                delConfirm === v
+                  ? "bg-(--color-accent-soft) text-(--color-accent-strong) ring-1 ring-(--color-accent)/40"
+                  : "bg-(--color-bg-2) text-(--color-fg-3) ring-1 ring-(--color-border-soft) hover:bg-(--color-surface-hi)",
+              )}
+            >
+              {DELETE_CONFIRM_LABEL[v]}
+            </button>
+          ))}
+        </div>
+        <p className="mt-2 text-[11px] break-keep text-(--color-fg-4)">
+          지운 메모는 30일간 휴지통에 남으므로 <b>묻지 않음</b>도 안전합니다.
+          메모함 삭제는 이 설정과 무관하게 항상 확인합니다.
+        </p>
       </div>
     </section>
   );
