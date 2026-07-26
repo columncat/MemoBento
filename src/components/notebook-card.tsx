@@ -1,8 +1,11 @@
 "use client";
 
 import {
+  CalendarClock,
   Check,
   GripVertical,
+  ListChecks,
+  NotebookText,
   LayoutGrid,
   List,
   Loader2,
@@ -23,12 +26,21 @@ import {
   looksLikeUrl,
   type MemoDragPayload,
   type NotebookDTO,
+  type NotebookKind,
   type ViewMode,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+import type { ChecklistActions } from "./checklist-item";
 import { MemoList } from "./memo-list";
 import type { MemoActions } from "./memo-item";
+
+/** 메모함 종류별 표시 정보. */
+export const KIND_META = {
+  memo: { label: "메모", Icon: NotebookText, hint: "메모 또는 URL 입력 후 Enter" },
+  checklist: { label: "체크리스트", Icon: ListChecks, hint: "할 일 입력 후 Enter" },
+  todo: { label: "TODO", Icon: CalendarClock, hint: "할 일 입력 후 Enter (기한은 나중에)" },
+} as const;
 
 export interface NotebookHandlers {
   addText: (notebookId: string, text: string) => Promise<void>;
@@ -36,6 +48,8 @@ export interface NotebookHandlers {
   addFiles: (notebookId: string, files: File[]) => Promise<void>;
   /** 메모를 다른 메모함으로 이동. */
   moveMemo: (memoId: string, toNotebookId: string) => Promise<void>;
+  /** 체크리스트·TODO 항목 조작. */
+  checklist: ChecklistActions;
   /** 사용자에게 알릴 메시지 (받을 수 없는 항목을 떨어뜨린 경우 등). */
   notify: (message: string) => void;
   setViewMode: (notebookId: string, mode: ViewMode) => void;
@@ -74,11 +88,14 @@ export function NotebookCard({
   const canText = notebook.accepts.includes("text");
   const canFiles = acceptsFiles(notebook);
 
-  const placeholder = canLink && canText
-    ? "메모 또는 URL 입력 후 Enter"
-    : canLink
-      ? "URL 입력 후 Enter"
-      : "메모 입력 후 Enter";
+  const isTask = notebook.kind === "checklist" || notebook.kind === "todo";
+  const placeholder = isTask
+    ? KIND_META[notebook.kind].hint
+    : canLink && canText
+      ? "메모 또는 URL 입력 후 Enter"
+      : canLink
+        ? "URL 입력 후 Enter"
+        : "메모 입력 후 Enter";
 
   /**
    * 입력 한 줄을 메모로. 메모함이 받는 종류에 따라 해석이 달라진다.
@@ -290,6 +307,18 @@ export function NotebookCard({
               aria-label="시스템 예약 메모함"
             />
           )}
+          {isTask && (
+            <span
+              className="flex shrink-0 items-center gap-1 rounded-full bg-(--color-bg-2) px-1.5 py-0.5 text-[10px] text-(--color-fg-3)"
+              title={KIND_META[notebook.kind].label}
+            >
+              {(() => {
+                const I = KIND_META[notebook.kind].Icon;
+                return <I className="h-2.5 w-2.5" />;
+              })()}
+              {KIND_META[notebook.kind].label}
+            </span>
+          )}
           <span className="shrink-0 font-mono text-[11px] text-(--color-fg-4)">
             {String(notebook.memos.length).padStart(2, "0")}
           </span>
@@ -300,8 +329,13 @@ export function NotebookCard({
             <Loader2 className="h-3.5 w-3.5 animate-spin text-(--color-accent)" />
           )}
 
-          {/* 리스트 / 그리드 */}
-          <div className="mr-1 flex items-center rounded-md bg-(--color-bg-2) p-0.5 ring-1 ring-(--color-border-soft)">
+          {/* 리스트 / 그리드 — 체크리스트·TODO 는 항상 한 줄이라 감춘다 */}
+          <div
+            className={cn(
+              "mr-1 flex items-center rounded-md bg-(--color-bg-2) p-0.5 ring-1 ring-(--color-border-soft)",
+              isTask && "hidden",
+            )}
+          >
             {(
               [
                 { mode: "list" as const, Icon: List, label: "리스트 보기" },
@@ -419,13 +453,17 @@ export function NotebookCard({
         <MemoList
           memos={notebook.memos}
           viewMode={notebook.viewMode}
+          kind={notebook.kind}
           actions={memoActions}
+          checklistActions={handlers.checklist}
           emptyHint={
-            canFiles
-              ? "메모를 입력하거나 파일을 끌어다 놓으세요"
-              : canLink
-                ? "링크만 담는 메모함입니다"
-                : "텍스트 메모만 담는 메모함입니다"
+            isTask
+              ? "할 일을 입력하세요"
+              : canFiles
+                ? "메모를 입력하거나 파일을 끌어다 놓으세요"
+                : canLink
+                  ? "링크만 담는 메모함입니다"
+                  : "텍스트 메모만 담는 메모함입니다"
           }
         />
       </div>
@@ -459,10 +497,11 @@ export function NotebookCard({
 export function AddNotebookCard({
   onCreate,
 }: {
-  onCreate: (name: string) => Promise<void>;
+  onCreate: (name: string, kind: NotebookKind) => Promise<void>;
 }) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
+  const [kind, setKind] = useState<NotebookKind>("memo");
   const [busy, setBusy] = useState(false);
 
   const create = async () => {
@@ -473,8 +512,9 @@ export function AddNotebookCard({
     }
     setBusy(true);
     try {
-      await onCreate(value);
+      await onCreate(value, kind);
       setName("");
+      setKind("memo");
       setOpen(false);
     } finally {
       setBusy(false);
@@ -486,7 +526,7 @@ export function AddNotebookCard({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex h-[580px] xl:h-[660px] 2xl:h-[740px] flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-(--color-border) text-(--color-fg-4) transition hover:border-(--color-accent)/60 hover:bg-(--color-surface)/40 hover:text-(--color-fg-2)"
+        className="flex h-[580px] flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-(--color-border) text-(--color-fg-4) transition hover:border-(--color-accent)/60 hover:bg-(--color-surface)/40 hover:text-(--color-fg-2) xl:h-[660px] 2xl:h-[740px]"
       >
         <Plus className="h-6 w-6" />
         <span className="text-sm">새 메모함</span>
@@ -495,7 +535,7 @@ export function AddNotebookCard({
   }
 
   return (
-    <div className="flex h-[580px] xl:h-[660px] 2xl:h-[740px] flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border border-dashed border-(--color-accent)/60 bg-(--color-surface)/40 px-6">
+    <div className="flex h-[580px] flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border border-dashed border-(--color-accent)/60 bg-(--color-surface)/40 px-6 xl:h-[660px] 2xl:h-[740px]">
       <input
         autoFocus
         value={name}
@@ -511,6 +551,38 @@ export function AddNotebookCard({
         maxLength={60}
         className="w-full rounded-lg bg-(--color-bg-2) px-3 py-2 text-center text-sm text-(--color-fg) ring-1 ring-(--color-accent)/60 outline-none placeholder:text-(--color-fg-4)"
       />
+
+      {/* 종류 고르기 */}
+      <div className="flex w-full flex-col gap-1">
+        {(Object.keys(KIND_META) as NotebookKind[]).map((k) => {
+          const { label, Icon } = KIND_META[k];
+          const desc =
+            k === "memo"
+              ? "텍스트·링크·파일"
+              : k === "checklist"
+                ? "체크박스 한 줄 항목"
+                : "체크박스 + 기한";
+          return (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setKind(k)}
+              aria-pressed={kind === k}
+              className={cn(
+                "flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-xs transition",
+                kind === k
+                  ? "bg-(--color-accent-soft) text-(--color-accent-strong) ring-1 ring-(--color-accent)/40"
+                  : "bg-(--color-bg-2) text-(--color-fg-3) ring-1 ring-(--color-border-soft) hover:bg-(--color-surface-hi)",
+              )}
+            >
+              <Icon className="h-3.5 w-3.5 shrink-0" />
+              <span className="font-medium">{label}</span>
+              <span className="ml-auto text-[10px] text-(--color-fg-4)">{desc}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="flex items-center gap-2">
         <button
           type="button"

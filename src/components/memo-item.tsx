@@ -180,7 +180,7 @@ function ActionButtons({
  * 판정에 필요한 출처 정보는 dragover 중 DataTransfer 값을 읽을 수 없어
  * lib/dnd 의 모듈 상태로 본다.
  */
-function useItemDnd(memo: MemoDTO, actions: MemoActions) {
+export function useItemDnd(memo: MemoDTO, actions: MemoActions) {
   const [over, setOver] = useState<false | "self" | "reject">(false);
 
   const dragged = () => activeMemoDrag();

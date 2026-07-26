@@ -1,4 +1,4 @@
-import type { NotebookDTO, ViewMode } from "./types";
+import type { NotebookDTO, NotebookKind, ViewMode } from "./types";
 
 /**
  * 모든 변경 API 는 갱신된 메모함 전체 목록을 돌려준다.
@@ -27,8 +27,8 @@ const jsonInit = (method: string, body: unknown): RequestInit => ({
 export const api = {
   list: () => mutate("/api/notebooks", { method: "GET" }),
 
-  createNotebook: (name: string) =>
-    mutate("/api/notebooks", jsonInit("POST", { name })),
+  createNotebook: (name: string, kind: NotebookKind = "memo") =>
+    mutate("/api/notebooks", jsonInit("POST", { name, kind })),
 
   updateNotebook: (id: string, patch: { name?: string; viewMode?: ViewMode }) =>
     mutate(`/api/notebooks/${encodeURIComponent(id)}`, jsonInit("PATCH", patch)),
@@ -50,7 +50,14 @@ export const api = {
 
   updateMemo: (
     id: string,
-    patch: { text?: string; title?: string; url?: string; notebookId?: string },
+    patch: {
+      text?: string;
+      title?: string;
+      url?: string;
+      done?: boolean;
+      dueAt?: number | null;
+      notebookId?: string;
+    },
   ) => mutate(`/api/memos/${encodeURIComponent(id)}`, jsonInit("PATCH", patch)),
 
   deleteMemo: (id: string) =>

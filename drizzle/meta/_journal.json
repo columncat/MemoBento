@@ -22,6 +22,13 @@
       "when": 1785000002000,
       "tag": "0002_third_slayback",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1785104599547,
+      "tag": "0003_large_black_queen",
+      "breakpoints": true
     }
   ]
 }

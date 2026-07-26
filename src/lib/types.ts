@@ -6,11 +6,12 @@
 import type {
   FileKind,
   MemoType,
+  NotebookKind,
   SystemKey,
   ViewMode,
 } from "./db/schema";
 
-export type { FileKind, MemoType, SystemKey, ViewMode };
+export type { FileKind, MemoType, NotebookKind, SystemKey, ViewMode };
 
 export interface FileDTO {
   id: string;
@@ -39,6 +40,10 @@ export interface MemoDTO {
   url: string | null;
   iconUrl: string | null;
   file: FileDTO | null;
+  /** 체크리스트·TODO 완료 여부. */
+  done: boolean;
+  /** TODO 기한 (unix ms). 없으면 null. */
+  dueAt: number | null;
   createdAt: number;
   updatedAt: number;
   /** true = MailBento widget_state 에 저장되는 메모 (시스템 메모함과 동기화). */
@@ -52,6 +57,8 @@ export interface NotebookDTO {
   systemKey: SystemKey | null;
   viewMode: ViewMode;
   position: number;
+  /** 메모함 종류 — 일반 메모 / 체크리스트 / TODO. */
+  kind: NotebookKind;
   /**
    * 이 메모함이 받는 메모 종류.
    * 시스템 메모함은 MailBento 자료구조를 그대로 쓰므로 제한된다 —
@@ -123,6 +130,36 @@ export function memoLabel(memo: MemoDTO): string {
   if (memo.file) return memo.file.name;
   if (memo.url) return hostnameOf(memo.url);
   return memo.text?.split("\n")[0]?.slice(0, 60) ?? "";
+}
+
+/** 기한이 지났는가 (오늘 이전). */
+export function isOverdue(dueAt: number | null, done: boolean): boolean {
+  if (!dueAt || done) return false;
+  const end = new Date(dueAt);
+  end.setHours(23, 59, 59, 999);
+  return end.getTime() < Date.now();
+}
+
+/** 기한을 짧게 — 오늘/내일/어제는 말로, 그 외엔 날짜. */
+export function formatDue(dueAt: number): string {
+  const d = new Date(dueAt);
+  const t = new Date();
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const diff = Math.round((day(d) - day(t)) / 86400000);
+  if (diff === 0) return "오늘";
+  if (diff === 1) return "내일";
+  if (diff === -1) return "어제";
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  if (d.getFullYear() !== t.getFullYear()) return `${d.getFullYear()}.${mm}.${dd}`;
+  return `${mm}.${dd}`;
+}
+
+/** <input type="date"> 값 (YYYY-MM-DD). */
+export function toDateInput(dueAt: number | null): string {
+  if (!dueAt) return "";
+  const d = new Date(dueAt);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
 /** 클릭 시 모달로 열람 가능한 메모인가 (이미지 / PDF / plaintext 파일 / 텍스트). */

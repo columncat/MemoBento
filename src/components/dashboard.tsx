@@ -207,6 +207,16 @@ export function Dashboard({
     [pending, fail, notebooks],
   );
 
+  /** 목록 안의 메모 하나를 그 자리에서 갈아끼운다 (서버 응답 전 즉시 반영용). */
+  const patchMemo = useCallback((memoId: string, patch: Partial<MemoDTO>) => {
+    setNotebooks((prev) =>
+      prev.map((n) => ({
+        ...n,
+        memos: n.memos.map((m) => (m.id === memoId ? { ...m, ...patch } : m)),
+      })),
+    );
+  }, []);
+
   // ─ 메모함 조작 ─
   const handlers: NotebookHandlers = useMemo(
     () => ({
@@ -218,6 +228,21 @@ export function Dashboard({
       },
       moveMemo: (memoId, toNotebookId) =>
         run(() => api.updateMemo(memoId, { notebookId: toNotebookId })),
+      checklist: {
+        onToggle: (memo, done) => {
+          // 낙관적 반영 — 체크는 즉각 반응해야 한다
+          patchMemo(memo.id, { done });
+          void run(() => api.updateMemo(memo.id, { done })).catch(() => undefined);
+        },
+        onDue: (memo, dueAt) => {
+          patchMemo(memo.id, { dueAt });
+          void run(() => api.updateMemo(memo.id, { dueAt })).catch(() => undefined);
+        },
+        onRename: (memo, text) => {
+          patchMemo(memo.id, { text });
+          void run(() => api.updateMemo(memo.id, { text })).catch(() => undefined);
+        },
+      },
       notify: (message) => fail(new Error(message)),
       setViewMode: (id, mode: ViewMode) => {
         // 낙관적 반영 — 토글 반응이 즉시 보이도록
@@ -244,7 +269,7 @@ export function Dashboard({
       },
       expand: (nb) => setExpandedId(nb.id),
     }),
-    [run, fail, notebooks, expandedId],
+    [run, fail, patchMemo, notebooks, expandedId],
   );
 
   // ─ 메모 조작 ─
@@ -425,7 +450,7 @@ export function Dashboard({
               />
             ))}
             <AddNotebookCard
-              onCreate={(name) => run(() => api.createNotebook(name))}
+              onCreate={(name, kind) => run(() => api.createNotebook(name, kind))}
             />
           </section>
         </SortableContext>

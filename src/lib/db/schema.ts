@@ -21,10 +21,20 @@ export type MemoType = (typeof MEMO_TYPES)[number];
 export const FILE_KINDS = ["image", "pdf", "text", "file"] as const;
 export type FileKind = (typeof FILE_KINDS)[number];
 
+/**
+ * 메모함 종류.
+ *   memo      — 지금까지의 메모함 (텍스트·링크·파일 전부)
+ *   checklist — 체크박스가 달린 얇은 항목만
+ *   todo      — 체크박스 + 기한
+ */
+export const NOTEBOOK_KINDS = ["memo", "checklist", "todo"] as const;
+export type NotebookKind = (typeof NOTEBOOK_KINDS)[number];
+
 export const notebooks = sqliteTable("notebooks", {
   /** uid 문자열. 시스템 메모함은 "sys-corkboard" / "sys-memo" 고정. */
   id: text("id").primaryKey(),
   name: text("name").notNull(),
+  kind: text("kind", { enum: NOTEBOOK_KINDS }).notNull().default("memo"),
   /** null 이면 사용자 메모함 (이름 변경·삭제 가능). */
   systemKey: text("system_key", { enum: SYSTEM_KEYS }),
   viewMode: text("view_mode", { enum: VIEW_MODES }).notNull().default("list"),
@@ -91,6 +101,10 @@ export const memos = sqliteTable(
     iconUrl: text("icon_url"),
     /** image/pdf/file 메모의 첨부. */
     fileId: text("file_id").references(() => files.id, { onDelete: "set null" }),
+    /** 체크리스트·TODO 에서 완료 여부. 그 외 메모함에서는 쓰이지 않는다. */
+    done: integer("done").notNull().default(0),
+    /** TODO 기한 (없으면 null). 날짜만 쓰지만 시각까지 담아둔다. */
+    dueAt: integer("due_at", { mode: "timestamp" }),
     position: integer("position").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()

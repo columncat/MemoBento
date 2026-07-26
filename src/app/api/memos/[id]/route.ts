@@ -10,6 +10,9 @@ const patchSchema = z.object({
   text: z.string().max(20000).optional(),
   title: z.string().max(200).optional(),
   url: z.string().trim().optional(),
+  done: z.boolean().optional(),
+  /** null 이면 기한 해제. */
+  dueAt: z.number().int().nullable().optional(),
   notebookId: z.string().min(1).optional(),
 });
 

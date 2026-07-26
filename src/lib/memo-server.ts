@@ -1,7 +1,13 @@
 import { asc, desc, eq } from "drizzle-orm";
 
 import { db, schema } from "./db";
-import { MEMO_TYPES, type MemoType, type SystemKey, type ViewMode } from "./db/schema";
+import {
+  MEMO_TYPES,
+  type MemoType,
+  type NotebookKind,
+  type SystemKey,
+  type ViewMode,
+} from "./db/schema";
 import {
   getLegacyState,
   setLegacyState,
@@ -43,25 +49,30 @@ export const SYSTEM_NOTEBOOKS: {
  * 있는 것이 정해져 있다 — Corkboard 는 링크만, Memo 는 텍스트만. 새로 만드는
  * 것도, 다른 메모함에서 옮겨오는 것도 이 규칙을 따른다.
  */
-export function acceptedTypes(systemKey: SystemKey | null): MemoType[] {
+export function acceptedTypes(
+  systemKey: SystemKey | null,
+  kind: NotebookKind = "memo",
+): MemoType[] {
   if (systemKey === "corkboard") return ["link"];
   if (systemKey === "memo") return ["text"];
+  // 체크리스트·TODO 는 한 줄짜리 항목만 담는다 (파일·링크는 받지 않음)
+  if (kind === "checklist" || kind === "todo") return ["text"];
   return [...MEMO_TYPES];
 }
 
 export class MemoTypeNotAllowedError extends Error {
   constructor(notebookName: string, accepted: MemoType[]) {
     const what = accepted.includes("link") ? "링크" : "텍스트";
-    super(`"${notebookName}" 메모함에는 ${what} 메모만 넣을 수 있습니다`);
+    super(`"${notebookName}" 메모함에는 ${what} 항목만 넣을 수 있습니다`);
     this.name = "MemoTypeNotAllowedError";
   }
 }
 
 function assertAccepts(
-  nb: { name: string; systemKey: SystemKey | null },
+  nb: { name: string; systemKey: SystemKey | null; kind?: NotebookKind },
   type: MemoType,
 ): void {
-  const accepted = acceptedTypes(nb.systemKey);
+  const accepted = acceptedTypes(nb.systemKey, nb.kind ?? "memo");
   if (!accepted.includes(type)) {
     throw new MemoTypeNotAllowedError(nb.name, accepted);
   }
@@ -123,7 +134,8 @@ export function listNotebooks(): NotebookDTO[] {
       systemKey: nb.systemKey ?? null,
       viewMode: nb.viewMode,
       position: nb.position,
-      accepts: acceptedTypes(nb.systemKey ?? null),
+      kind: nb.kind,
+      accepts: acceptedTypes(nb.systemKey ?? null, nb.kind),
       memos,
     };
   });
@@ -150,6 +162,8 @@ function loadDbMemos(): Map<string, MemoDTO[]> {
       url: r.memos.url,
       iconUrl: r.memos.iconUrl,
       file: r.files ? toFileDto(r.files) : null,
+      done: r.memos.done === 1,
+      dueAt: r.memos.dueAt ? r.memos.dueAt.getTime() : null,
       createdAt: r.memos.createdAt.getTime(),
       updatedAt: r.memos.updatedAt.getTime(),
       legacy: false,
@@ -182,6 +196,8 @@ function pinToDto(p: LegacyPin, notebookId: string): MemoDTO {
     url: p.url,
     iconUrl: p.iconUrl || autoIconUrl(p.url),
     file: null,
+    done: false,
+    dueAt: null,
     createdAt: 0,
     updatedAt: 0,
     legacy: true,
@@ -198,6 +214,8 @@ function legacyMemoToDto(m: LegacyMemo, notebookId: string): MemoDTO {
     url: null,
     iconUrl: null,
     file: null,
+    done: false,
+    dueAt: null,
     createdAt: m.createdAt,
     updatedAt: m.createdAt,
     legacy: true,
@@ -216,13 +234,24 @@ export function getNotebook(id: string) {
     .get();
 }
 
-export function createNotebook(name: string, viewMode: ViewMode = "list") {
+export function createNotebook(
+  name: string,
+  kind: NotebookKind = "memo",
+  viewMode: ViewMode = "list",
+) {
   ensureSystemNotebooks();
   const all = db.select().from(schema.notebooks).all();
   const nextPos = all.reduce((m, n) => Math.max(m, n.position), -1) + 1;
   const id = uid();
   db.insert(schema.notebooks)
-    .values({ id, name: name.trim() || "새 메모함", viewMode, position: nextPos })
+    .values({
+      id,
+      name: name.trim() || "새 메모함",
+      kind,
+      // 체크리스트·TODO 는 그리드로 볼 이유가 없다
+      viewMode: kind === "memo" ? viewMode : "list",
+      position: nextPos,
+    })
     .run();
   return id;
 }
@@ -295,7 +324,10 @@ export interface CreateMemoInput {
 export function createMemo(input: CreateMemoInput): string {
   const nb = getNotebook(input.notebookId);
   if (!nb) throw new Error("메모함을 찾을 수 없습니다");
-  assertAccepts({ name: nb.name, systemKey: nb.systemKey ?? null }, input.type);
+  assertAccepts(
+    { name: nb.name, systemKey: nb.systemKey ?? null, kind: nb.kind },
+    input.type,
+  );
 
   const target = legacyTargetOf(nb.systemKey ?? null, input.type);
 
@@ -382,6 +414,10 @@ export interface UpdateMemoInput {
   text?: string;
   title?: string;
   url?: string;
+  /** 체크리스트·TODO 완료 표시. */
+  done?: boolean;
+  /** TODO 기한 (unix ms). null 이면 해제. */
+  dueAt?: number | null;
   /** 다른 메모함으로 이동. */
   notebookId?: string;
 }
@@ -400,6 +436,10 @@ export function updateMemo(id: string, patch: UpdateMemoInput): void {
     if (patch.url !== undefined) {
       set.url = patch.url.trim();
       set.iconUrl = autoIconUrl(patch.url.trim());
+    }
+    if (patch.done !== undefined) set.done = patch.done ? 1 : 0;
+    if (patch.dueAt !== undefined) {
+      set.dueAt = patch.dueAt === null ? null : new Date(patch.dueAt);
     }
     db.update(schema.memos).set(set).where(eq(schema.memos.id, id)).run();
     if (moving) moveDbMemo(id, patch.notebookId!);
@@ -445,7 +485,10 @@ function moveDbMemo(id: string, toNotebookId: string): void {
     .where(eq(schema.memos.id, id))
     .get();
   if (!row) return;
-  assertAccepts({ name: target.name, systemKey: target.systemKey ?? null }, row.type);
+  assertAccepts(
+    { name: target.name, systemKey: target.systemKey ?? null, kind: target.kind },
+    row.type,
+  );
 
   const legacyTarget = legacyTargetOf(target.systemKey ?? null, row.type);
   if (!legacyTarget) {
@@ -500,7 +543,10 @@ function moveLegacyMemo(
 
   // 목적지에서도 같은 레거시 배열에 속한다면 이동할 필요가 없다.
   if (legacyTargetOf(target.systemKey ?? null, type) === from.store) return;
-  assertAccepts({ name: target.name, systemKey: target.systemKey ?? null }, type);
+  assertAccepts(
+    { name: target.name, systemKey: target.systemKey ?? null, kind: target.kind },
+    type,
+  );
 
   // JSON → DB
   if (from.store === "pins") {
