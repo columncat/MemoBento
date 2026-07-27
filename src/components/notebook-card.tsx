@@ -4,16 +4,17 @@ import {
   CalendarClock,
   Check,
   GripVertical,
-  ListChecks,
-  NotebookText,
   LayoutGrid,
   List,
+  ListChecks,
   Loader2,
   Lock,
   Maximize2,
+  NotebookText,
   Paperclip,
   Pencil,
   Plus,
+  Repeat,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -33,6 +34,7 @@ import { cn } from "@/lib/utils";
 
 import type { ChecklistActions } from "./checklist-item";
 import { MemoList } from "./memo-list";
+import type { ScheduleActions } from "./schedule-item";
 import type { MemoActions } from "./memo-item";
 
 /** 메모함 종류별 표시 정보. */
@@ -40,6 +42,7 @@ export const KIND_META = {
   memo: { label: "메모", Icon: NotebookText, hint: "메모 또는 URL 입력 후 Enter" },
   checklist: { label: "체크리스트", Icon: ListChecks, hint: "할 일 입력 후 Enter" },
   todo: { label: "TODO", Icon: CalendarClock, hint: "할 일 입력 후 Enter (기한은 나중에)" },
+  schedule: { label: "반복 일정", Icon: Repeat, hint: "일정 입력 후 Enter (주기는 나중에)" },
 } as const;
 
 export interface NotebookHandlers {
@@ -50,6 +53,8 @@ export interface NotebookHandlers {
   moveMemo: (memoId: string, toNotebookId: string) => Promise<void>;
   /** 체크리스트·TODO 항목 조작. */
   checklist: ChecklistActions;
+  /** 반복 일정 항목 조작. */
+  schedule: ScheduleActions;
   /** 사용자에게 알릴 메시지 (받을 수 없는 항목을 떨어뜨린 경우 등). */
   notify: (message: string) => void;
   setViewMode: (notebookId: string, mode: ViewMode) => void;
@@ -88,7 +93,8 @@ export function NotebookCard({
   const canText = notebook.accepts.includes("text");
   const canFiles = acceptsFiles(notebook);
 
-  const isTask = notebook.kind === "checklist" || notebook.kind === "todo";
+  // 얇은 한 줄로 그리는 종류 — 보기 전환도, 파일도 없다
+  const isTask = notebook.kind !== "memo";
   const placeholder = isTask
     ? KIND_META[notebook.kind].hint
     : canLink && canText
@@ -456,14 +462,17 @@ export function NotebookCard({
           kind={notebook.kind}
           actions={memoActions}
           checklistActions={handlers.checklist}
+          scheduleActions={handlers.schedule}
           emptyHint={
-            isTask
-              ? "할 일을 입력하세요"
-              : canFiles
-                ? "메모를 입력하거나 파일을 끌어다 놓으세요"
-                : canLink
-                  ? "링크만 담는 메모함입니다"
-                  : "텍스트 메모만 담는 메모함입니다"
+            notebook.kind === "schedule"
+              ? "반복할 일정을 입력하세요"
+              : isTask
+                ? "할 일을 입력하세요"
+                : canFiles
+                  ? "메모를 입력하거나 파일을 끌어다 놓으세요"
+                  : canLink
+                    ? "링크만 담는 메모함입니다"
+                    : "텍스트 메모만 담는 메모함입니다"
           }
         />
       </div>
@@ -561,7 +570,9 @@ export function AddNotebookCard({
               ? "텍스트·링크·파일"
               : k === "checklist"
                 ? "체크박스 한 줄 항목"
-                : "체크박스 + 기한";
+                : k === "todo"
+                  ? "체크박스 + 기한"
+                  : "주기마다 돌아오는 일정";
           return (
             <button
               key={k}

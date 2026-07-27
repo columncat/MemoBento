@@ -15,6 +15,7 @@ import {
   type LegacyPin,
   type LegacyState,
 } from "./legacy-store";
+import { normalizeRecurrence, type Recurrence } from "./recurrence";
 import { trashMemo, trashNotebook } from "./trash";
 import type { FileDTO, MemoDTO, NotebookDTO } from "./types";
 import { autoIconUrl, hostnameOf } from "./types";
@@ -56,8 +57,17 @@ export function acceptedTypes(
   if (systemKey === "corkboard") return ["link"];
   if (systemKey === "memo") return ["text"];
   // 체크리스트·TODO 는 한 줄짜리 항목만 담는다 (파일·링크는 받지 않음)
-  if (kind === "checklist" || kind === "todo") return ["text"];
+  if (kind === "checklist" || kind === "todo" || kind === "schedule") {
+    return ["text"];
+  }
   return [...MEMO_TYPES];
+}
+
+export class InvalidRecurrenceError extends Error {
+  constructor() {
+    super("반복 주기를 알아볼 수 없습니다");
+    this.name = "InvalidRecurrenceError";
+  }
 }
 
 export class MemoTypeNotAllowedError extends Error {
@@ -141,6 +151,16 @@ export function listNotebooks(): NotebookDTO[] {
   });
 }
 
+/** 컬럼에 든 JSON 을 안전한 규칙으로. 깨졌으면 null. */
+function parseRecurrenceColumn(raw: string | null): Recurrence | null {
+  if (!raw) return null;
+  try {
+    return normalizeRecurrence(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
 /** notebookId → DB 메모 (최신순). */
 function loadDbMemos(): Map<string, MemoDTO[]> {
   const rows = db
@@ -164,6 +184,7 @@ function loadDbMemos(): Map<string, MemoDTO[]> {
       file: r.files ? toFileDto(r.files) : null,
       done: r.memos.done === 1,
       dueAt: r.memos.dueAt ? r.memos.dueAt.getTime() : null,
+      recurrence: parseRecurrenceColumn(r.memos.recurrence),
       createdAt: r.memos.createdAt.getTime(),
       updatedAt: r.memos.updatedAt.getTime(),
       legacy: false,
@@ -198,6 +219,7 @@ function pinToDto(p: LegacyPin, notebookId: string): MemoDTO {
     file: null,
     done: false,
     dueAt: null,
+    recurrence: null,
     createdAt: 0,
     updatedAt: 0,
     legacy: true,
@@ -216,6 +238,7 @@ function legacyMemoToDto(m: LegacyMemo, notebookId: string): MemoDTO {
     file: null,
     done: false,
     dueAt: null,
+    recurrence: null,
     createdAt: m.createdAt,
     updatedAt: m.createdAt,
     legacy: true,
@@ -418,6 +441,8 @@ export interface UpdateMemoInput {
   done?: boolean;
   /** TODO 기한 (unix ms). null 이면 해제. */
   dueAt?: number | null;
+  /** 반복 일정 규칙. null 이면 해제. */
+  recurrence?: unknown;
   /** 다른 메모함으로 이동. */
   notebookId?: string;
 }
@@ -440,6 +465,17 @@ export function updateMemo(id: string, patch: UpdateMemoInput): void {
     if (patch.done !== undefined) set.done = patch.done ? 1 : 0;
     if (patch.dueAt !== undefined) {
       set.dueAt = patch.dueAt === null ? null : new Date(patch.dueAt);
+    }
+    if (patch.recurrence !== undefined) {
+      if (patch.recurrence === null) {
+        set.recurrence = null;
+      } else {
+        // 알아볼 수 없는 규칙은 거절한다. 조용히 null 로 두면 잘못된 요청 한 번에
+        // 멀쩡하던 반복 설정이 지워진다.
+        const rule = normalizeRecurrence(patch.recurrence);
+        if (!rule) throw new InvalidRecurrenceError();
+        set.recurrence = JSON.stringify(rule);
+      }
     }
     db.update(schema.memos).set(set).where(eq(schema.memos.id, id)).run();
     if (moving) moveDbMemo(id, patch.notebookId!);

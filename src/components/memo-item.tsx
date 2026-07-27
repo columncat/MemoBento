@@ -3,6 +3,7 @@
 import {
   Download,
   File as FileIcon,
+  GripVertical,
   FileCode2,
   FileText,
   Image as ImageIcon,
@@ -11,7 +12,7 @@ import {
   StickyNote,
   Trash2,
 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { activeMemoDrag, beginMemoDrag, endMemoDrag } from "@/lib/dnd";
 import { useSwReady } from "@/lib/sw-client";
@@ -182,35 +183,52 @@ function ActionButtons({
  */
 export function useItemDnd(memo: MemoDTO, actions: MemoActions) {
   const [over, setOver] = useState<false | "self" | "reject">(false);
+  const rowRef = useRef<HTMLElement | null>(null);
 
   const dragged = () => activeMemoDrag();
   const relevant = (e: React.DragEvent) =>
     e.dataTransfer.types.includes(MEMO_DND_TYPE);
 
+  /**
+   * 끌기는 **손잡이에서만** 시작한다.
+   * 행 전체를 draggable 로 두면 본문에서 마우스를 끄는 순간 이동이 시작되어
+   * 텍스트를 선택하거나 복사할 수 없다.
+   */
+  const handleProps = {
+    draggable: true,
+    onDragStart: (e: React.DragEvent) => {
+      const payload: MemoDragPayload = {
+        id: memo.id,
+        notebookId: memo.notebookId,
+        type: memo.type,
+      };
+      e.dataTransfer.effectAllowed = "move";
+      e.dataTransfer.setData(MEMO_DND_TYPE, JSON.stringify(payload));
+      // 앱 밖으로 떨어뜨렸을 때를 위한 최소한의 대체 표현
+      e.dataTransfer.setData("text/plain", memoLabel(memo));
+      // 손잡이만 끌려가 보이지 않도록 행 전체를 드래그 이미지로 쓴다
+      const row = rowRef.current;
+      if (row) {
+        const r = row.getBoundingClientRect();
+        e.dataTransfer.setDragImage(row, e.clientX - r.left, e.clientY - r.top);
+      }
+      beginMemoDrag(payload);
+    },
+    onDragEnd: () => {
+      endMemoDrag();
+      setOver(false);
+    },
+    onClick: (e: React.MouseEvent) => e.stopPropagation(),
+  };
+
   return {
     over,
+    handleProps,
     props: {
+      ref: rowRef as React.Ref<never>,
       role: "button" as const,
       tabIndex: 0,
       "aria-label": memoLabel(memo) || "메모 열기",
-      draggable: true,
-
-      onDragStart: (e: React.DragEvent) => {
-        const payload: MemoDragPayload = {
-          id: memo.id,
-          notebookId: memo.notebookId,
-          type: memo.type,
-        };
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData(MEMO_DND_TYPE, JSON.stringify(payload));
-        // 앱 밖으로 떨어뜨렸을 때를 위한 최소한의 대체 표현
-        e.dataTransfer.setData("text/plain", memoLabel(memo));
-        beginMemoDrag(payload);
-      },
-      onDragEnd: () => {
-        endMemoDrag();
-        setOver(false);
-      },
 
       onDragOver: (e: React.DragEvent) => {
         if (!relevant(e)) return;
@@ -256,6 +274,30 @@ export function useItemDnd(memo: MemoDTO, actions: MemoActions) {
   };
 }
 
+/** 끌어 옮기기 손잡이. 여기서만 드래그가 시작된다. */
+export function DragHandle({
+  handleProps,
+  className,
+}: {
+  handleProps: Record<string, unknown>;
+  className?: string;
+}) {
+  return (
+    <span
+      {...handleProps}
+      role="button"
+      aria-label="끌어서 옮기기"
+      title="끌어서 옮기기 / 순서 변경"
+      className={cn(
+        "grid w-4 shrink-0 cursor-grab place-items-center self-stretch rounded text-(--color-fg-4) opacity-0 transition group-hover:opacity-100 active:cursor-grabbing",
+        className,
+      )}
+    >
+      <GripVertical className="h-3.5 w-3.5" />
+    </span>
+  );
+}
+
 /** 메모 부제 — 링크는 URL, 파일은 용량, 텍스트는 시각. */
 function subtitleOf(memo: MemoDTO): string {
   if (memo.type === "link") return memo.url ?? "";
@@ -279,7 +321,7 @@ export function MemoRow({
 }) {
   const label = memoLabel(memo);
   const sub = subtitleOf(memo);
-  const { over, props } = useItemDnd(memo, actions);
+  const { over, props, handleProps } = useItemDnd(memo, actions);
 
   return (
     <li
@@ -290,9 +332,11 @@ export function MemoRow({
         over === "self" && "border-t-2 border-(--color-accent) pt-2",
       )}
     >
+      <DragHandle handleProps={handleProps} />
       <Thumb memo={memo} size="sm" />
 
-      <div className="min-w-0 flex-1">
+      {/* select-text — 본문은 끌어서 선택·복사할 수 있어야 한다 */}
+      <div className="min-w-0 flex-1 select-text">
         {memo.type === "text" ? (
           <>
             <p className="line-clamp-3 break-words whitespace-pre-wrap text-sm leading-relaxed text-(--color-fg-2)">
@@ -327,7 +371,7 @@ export function MemoTile({
   actions: MemoActions;
 }) {
   const label = memoLabel(memo);
-  const { over, props } = useItemDnd(memo, actions);
+  const { over, props, handleProps } = useItemDnd(memo, actions);
 
   return (
     <li
@@ -339,13 +383,17 @@ export function MemoTile({
     >
       <div className="relative aspect-4/3 w-full overflow-hidden">
         {memo.type === "text" ? (
-          <p className="scrollbar-thin h-full overflow-hidden break-words whitespace-pre-wrap p-2.5 text-[12px] leading-snug text-(--color-fg-2)">
+          <p className="scrollbar-thin h-full overflow-hidden break-words whitespace-pre-wrap p-2.5 text-[12px] leading-snug select-text text-(--color-fg-2)">
             {memo.text}
           </p>
         ) : (
           <Thumb memo={memo} size="lg" />
         )}
         <ActionButtons memo={memo} actions={actions} floating />
+        <DragHandle
+          handleProps={handleProps}
+          className="absolute top-1.5 left-1.5 h-5 rounded bg-(--color-surface)/90 ring-1 ring-(--color-border-soft) backdrop-blur-sm"
+        />
       </div>
 
       <div className="border-t border-(--color-border-soft) px-2 py-1.5">

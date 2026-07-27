@@ -13,6 +13,8 @@ const patchSchema = z.object({
   done: z.boolean().optional(),
   /** null 이면 기한 해제. */
   dueAt: z.number().int().nullable().optional(),
+  /** 반복 규칙. 서버에서 정규화하므로 형태는 느슨하게 받는다. null 이면 해제. */
+  recurrence: z.unknown().optional(),
   notebookId: z.string().min(1).optional(),
 });
 

@@ -56,6 +56,7 @@ export const api = {
       url?: string;
       done?: boolean;
       dueAt?: number | null;
+      recurrence?: unknown;
       notebookId?: string;
     },
   ) => mutate(`/api/memos/${encodeURIComponent(id)}`, jsonInit("PATCH", patch)),

@@ -26,8 +26,9 @@ export type FileKind = (typeof FILE_KINDS)[number];
  *   memo      — 지금까지의 메모함 (텍스트·링크·파일 전부)
  *   checklist — 체크박스가 달린 얇은 항목만
  *   todo      — 체크박스 + 기한
+ *   schedule  — 반복 주기로 돌아오는 일정
  */
-export const NOTEBOOK_KINDS = ["memo", "checklist", "todo"] as const;
+export const NOTEBOOK_KINDS = ["memo", "checklist", "todo", "schedule"] as const;
 export type NotebookKind = (typeof NOTEBOOK_KINDS)[number];
 
 export const notebooks = sqliteTable("notebooks", {
@@ -105,6 +106,11 @@ export const memos = sqliteTable(
     done: integer("done").notNull().default(0),
     /** TODO 기한 (없으면 null). 날짜만 쓰지만 시각까지 담아둔다. */
     dueAt: integer("due_at", { mode: "timestamp" }),
+    /**
+     * 반복 일정 규칙 JSON (lib/recurrence 의 Recurrence).
+     * 필드가 여럿이고 늘어날 여지가 있어 컬럼을 쪼개지 않는다.
+     */
+    recurrence: text("recurrence"),
     position: integer("position").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()

@@ -12,7 +12,7 @@ import {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-import type { MemoActions } from "./memo-item";
+import { DragHandle, type MemoActions } from "./memo-item";
 
 export interface ChecklistActions {
   /** 완료 토글. */
@@ -35,6 +35,7 @@ export function ChecklistRow({
   actions,
   memoActions,
   dnd,
+  handleProps,
 }: {
   memo: MemoDTO;
   kind: NotebookKind;
@@ -42,6 +43,8 @@ export function ChecklistRow({
   memoActions: MemoActions;
   /** 순서 변경용 DnD props (memo-item 과 동일 규약). */
   dnd: Record<string, unknown>;
+  /** 끌기를 시작하는 손잡이 props. */
+  handleProps: Record<string, unknown>;
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(memo.text ?? "");
@@ -63,6 +66,8 @@ export function ChecklistRow({
         memo.done && "opacity-60",
       )}
     >
+      <DragHandle handleProps={handleProps} className="h-4" />
+
       {/* 체크박스 */}
       <button
         type="button"
@@ -108,7 +113,7 @@ export function ChecklistRow({
             setEditing(true);
           }}
           className={cn(
-            "min-w-0 flex-1 cursor-text truncate text-[13px] text-(--color-fg-2)",
+            "min-w-0 flex-1 cursor-text truncate text-[13px] select-text text-(--color-fg-2)",
             memo.done && "line-through",
           )}
           title={memo.text ?? ""}

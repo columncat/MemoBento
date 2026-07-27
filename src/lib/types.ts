@@ -11,7 +11,10 @@ import type {
   ViewMode,
 } from "./db/schema";
 
+import type { Recurrence } from "./recurrence";
+
 export type { FileKind, MemoType, NotebookKind, SystemKey, ViewMode };
+export type { Recurrence };
 
 export interface FileDTO {
   id: string;
@@ -44,6 +47,8 @@ export interface MemoDTO {
   done: boolean;
   /** TODO 기한 (unix ms). 없으면 null. */
   dueAt: number | null;
+  /** 반복 일정 규칙 (schedule 메모함). 없으면 null. */
+  recurrence: Recurrence | null;
   createdAt: number;
   updatedAt: number;
   /** true = MailBento widget_state 에 저장되는 메모 (시스템 메모함과 동기화). */

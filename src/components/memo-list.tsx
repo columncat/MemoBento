@@ -6,6 +6,7 @@ import type { MemoDTO, NotebookKind, ViewMode } from "@/lib/types";
 
 import { ChecklistRow, type ChecklistActions } from "./checklist-item";
 import { MemoRow, MemoTile, useItemDnd, type MemoActions } from "./memo-item";
+import { ScheduleRow, type ScheduleActions } from "./schedule-item";
 
 export function MemoList({
   memos,
@@ -13,6 +14,7 @@ export function MemoList({
   kind,
   actions,
   checklistActions,
+  scheduleActions,
   emptyHint,
 }: {
   memos: MemoDTO[];
@@ -20,6 +22,7 @@ export function MemoList({
   kind: NotebookKind;
   actions: MemoActions;
   checklistActions: ChecklistActions;
+  scheduleActions: ScheduleActions;
   emptyHint?: string;
 }) {
   if (memos.length === 0) {
@@ -42,6 +45,22 @@ export function MemoList({
             memo={m}
             kind={kind}
             actions={checklistActions}
+            memoActions={actions}
+          />
+        ))}
+      </ul>
+    );
+  }
+
+  // 반복 일정도 얇은 한 줄 — 오른쪽에 주기 / 시각 / 다음 발생일이 붙는다
+  if (kind === "schedule") {
+    return (
+      <ul className="flex flex-col">
+        {memos.map((m) => (
+          <ScheduleItem
+            key={m.id}
+            memo={m}
+            actions={scheduleActions}
             memoActions={actions}
           />
         ))}
@@ -81,19 +100,50 @@ function ChecklistItem({
   actions: ChecklistActions;
   memoActions: MemoActions;
 }) {
-  const { over, props } = useItemDnd(memo, memoActions);
+  const { over, props, handleProps } = useItemDnd(memo, memoActions);
   return (
     <ChecklistRow
       memo={memo}
       kind={kind}
       actions={actions}
       memoActions={memoActions}
+      handleProps={handleProps}
       dnd={{
         ...props,
         // 한 줄 항목에서는 클릭이 편집이므로 열기 동작을 뺀다
         onClick: undefined,
         className: undefined,
         style: over === "self" ? { boxShadow: "inset 0 2px 0 var(--color-accent)" } : undefined,
+      }}
+    />
+  );
+}
+
+/** ScheduleRow 용 래퍼 — 체크리스트와 같은 DnD 규약. */
+function ScheduleItem({
+  memo,
+  actions,
+  memoActions,
+}: {
+  memo: MemoDTO;
+  actions: ScheduleActions;
+  memoActions: MemoActions;
+}) {
+  const { over, props, handleProps } = useItemDnd(memo, memoActions);
+  return (
+    <ScheduleRow
+      memo={memo}
+      actions={actions}
+      memoActions={memoActions}
+      handleProps={handleProps}
+      dnd={{
+        ...props,
+        onClick: undefined,
+        className: undefined,
+        style:
+          over === "self"
+            ? { boxShadow: "inset 0 2px 0 var(--color-accent)" }
+            : undefined,
       }}
     />
   );

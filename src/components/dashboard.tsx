@@ -244,6 +244,18 @@ export function Dashboard({
           void run(() => api.updateMemo(memo.id, { text })).catch(() => undefined);
         },
       },
+      schedule: {
+        onRule: (memo, recurrence) => {
+          patchMemo(memo.id, { recurrence });
+          void run(() => api.updateMemo(memo.id, { recurrence })).catch(
+            () => undefined,
+          );
+        },
+        onRename: (memo, text) => {
+          patchMemo(memo.id, { text });
+          void run(() => api.updateMemo(memo.id, { text })).catch(() => undefined);
+        },
+      },
       notify: (message) => fail(new Error(message)),
       setViewMode: (id, mode: ViewMode) => {
         // 낙관적 반영 — 토글 반응이 즉시 보이도록
