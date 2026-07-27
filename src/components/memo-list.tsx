@@ -6,9 +6,9 @@ import { useMemo, useState } from "react";
 import {
   DEFAULT_HORIZON_MONTHS,
   defaultRange,
+  dayLabel,
   dropPast,
   expandMemos,
-  groupByDay,
   instanceState,
   scheduleViewOf,
   type ScheduleInstance,
@@ -20,8 +20,8 @@ import { ChecklistRow, type ChecklistActions } from "./checklist-item";
 import { MemoRow, MemoTile, useItemDnd, type MemoActions } from "./memo-item";
 import { ScheduleRow, useNow, type ScheduleActions } from "./schedule-item";
 
-/** 한 번에 펼쳐 보여주는 날짜 수. 나머지는 버튼으로 더 펼친다. */
-const DAYS_PER_PAGE = 7;
+/** 한 번에 펼쳐 보여주는 일정 수. 나머지는 버튼으로 더 펼친다. */
+const ITEMS_PER_PAGE = 20;
 
 export function MemoList({
   memos,
@@ -183,7 +183,7 @@ function InstanceView({
   memoActions: MemoActions;
   onShowRule?: (memo: MemoDTO) => void;
 }) {
-  const [days, setDays] = useState(DAYS_PER_PAGE);
+  const [shownCount, setShownCount] = useState(ITEMS_PER_PAGE);
   const [showDormant, setShowDormant] = useState(false);
 
   // now 를 분 단위로 새로 받으므로 전개를 그때마다 다시 하지 않도록 묶는다.
@@ -198,10 +198,10 @@ function InstanceView({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [memos, dayKeyOfNow]);
 
-  const groups = useMemo(() => {
-    if (!expansion || !now) return [];
-    return groupByDay(dropPast(expansion.instances, now), now);
-  }, [expansion, now]);
+  const upcoming = useMemo(
+    () => (expansion && now ? dropPast(expansion.instances, now) : []),
+    [expansion, now],
+  );
 
   // 서버에서는 "지금"을 알 수 없다. 그리면 hydration 이 깨진다.
   if (!now || !expansion) {
@@ -209,12 +209,11 @@ function InstanceView({
   }
 
   const { ruleless, dormant, truncated, omitted } = expansion;
-  const shown = groups.slice(0, days);
-  const restDays = groups.length - shown.length;
-  const shownCount = shown.reduce((n, g) => n + g.items.length, 0);
+  const shown = upcoming.slice(0, shownCount);
+  const rest = upcoming.length - shown.length;
 
   const nothingAtAll =
-    memos.length === 0 && groups.length === 0 && ruleless.length === 0;
+    memos.length === 0 && upcoming.length === 0 && ruleless.length === 0;
 
   if (nothingAtAll) {
     return (
@@ -248,57 +247,38 @@ function InstanceView({
         </div>
       )}
 
-      {groups.length === 0 ? (
+      {upcoming.length === 0 ? (
         <div className="rounded-lg border border-dashed border-(--color-border) px-4 py-6 text-center text-sm break-keep text-(--color-fg-3)">
           앞으로 {DEFAULT_HORIZON_MONTHS}개월 안에 예정된 일정이 없습니다
         </div>
       ) : (
         <div>
           <SectionHead>
-            앞으로 {DEFAULT_HORIZON_MONTHS}개월 · {shownCount}건 — 수정·삭제는 반복 규칙
-            목록에서
+            앞으로 {DEFAULT_HORIZON_MONTHS}개월 · {upcoming.length}건 — 수정·삭제는 반복
+            규칙 목록에서
           </SectionHead>
-          <ul className="flex flex-col">
-            {shown.map((g) => (
-              <li key={g.key}>
-                {/* z-0 이어야 한다 — 이보다 위로 올리면 행에서 열리는 편집기(z-30)가
-                    머리글 아래로 깔린다 */}
-                <div
-                  className={cn(
-                    "sticky top-0 z-0 -mx-1 mt-2 mb-0.5 flex items-center gap-1.5 bg-(--color-surface)/95 px-1 py-1 text-[12px] font-medium break-keep backdrop-blur-sm first:mt-0",
-                    g.carried || g.label === "오늘"
-                      ? "text-(--color-accent-strong)"
-                      : "text-(--color-fg-2)",
-                  )}
-                >
-                  <span>{g.label}</span>
-                  <span className="font-mono text-(--color-fg-3) tabular-nums">
-                    {g.day.getMonth() + 1}/{g.day.getDate()}
-                  </span>
-                </div>
-                <ul className="flex flex-col">
-                  {g.items.map((inst) => (
-                    <InstanceRow
-                      key={inst.key}
-                      inst={inst}
-                      now={now}
-                      actions={actions}
-                      memoActions={memoActions}
-                      onShowRule={onShowRule}
-                    />
-                  ))}
-                </ul>
-              </li>
+          {/* 날짜로 계층을 만들지 않고 일정 하나가 곧 한 항목이다.
+              머리글이 없으므로 날짜는 각 행이 직접 달고 나온다. */}
+          <ul className="flex flex-col gap-1">
+            {shown.map((inst) => (
+              <InstanceRow
+                key={inst.key}
+                inst={inst}
+                now={now}
+                actions={actions}
+                memoActions={memoActions}
+                onShowRule={onShowRule}
+              />
             ))}
           </ul>
 
-          {restDays > 0 && (
+          {rest > 0 && (
             <button
               type="button"
-              onClick={() => setDays((d) => d + DAYS_PER_PAGE)}
-              className="mt-1.5 w-full rounded-lg border border-(--color-border-soft) py-1.5 text-[12px] text-(--color-fg-2) transition hover:bg-(--color-surface-hi)"
+              onClick={() => setShownCount((n) => n + ITEMS_PER_PAGE)}
+              className="mt-1.5 w-full rounded-lg border border-(--color-border-soft) py-1.5 text-[13px] text-(--color-fg-2) transition hover:bg-(--color-surface-hi)"
             >
-              이후 {restDays}일 더 보기
+              {rest}건 더 보기
             </button>
           )}
         </div>
@@ -311,17 +291,19 @@ function InstanceView({
           <button
             type="button"
             onClick={() => setShowDormant((v) => !v)}
+            aria-expanded={showDormant}
+            aria-controls="schedule-dormant"
             className="flex w-full items-center gap-1 px-1 py-1 text-[12px] text-(--color-fg-3) transition hover:text-(--color-fg-2)"
           >
             {showDormant ? (
-              <ChevronDown className="h-3 w-3" />
+              <ChevronDown className="h-3 w-3" aria-hidden />
             ) : (
-              <ChevronRight className="h-3 w-3" />
+              <ChevronRight className="h-3 w-3" aria-hidden />
             )}
             예정 없음 · {dormant.length}
           </button>
           {showDormant && (
-            <ul className="flex flex-col">
+            <ul id="schedule-dormant" className="flex flex-col">
               {dormant.map((m) => (
                 <ScheduleItem
                   key={m.id}
@@ -374,6 +356,8 @@ function InstanceRow({
       memoActions={memoActions}
       variant="instance"
       now={now}
+      day={inst.day}
+      dayLabel={dayLabel(inst.day, now)}
       state={instanceState(inst, now)}
       onShowRule={onShowRule}
     />

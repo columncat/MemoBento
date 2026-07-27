@@ -14,10 +14,12 @@ import {
   instanceEndMs,
   instanceStartMs,
   matchesDay,
+  nextOccurrence,
   normalizeRecurrence,
   startOfDay,
   toDayString,
   withinWindow,
+  withLegacyAnchor,
   type Recurrence,
 } from "./recurrence";
 import {
@@ -68,6 +70,7 @@ function memo(over: Partial<MemoDTO> & { id: string }): MemoDTO {
     done: false,
     dueAt: null,
     recurrence: null,
+    color: null,
     createdAt: D("2025-01-01").getTime(),
     updatedAt: 0,
     legacy: false,
@@ -186,6 +189,71 @@ check("T-9 만료 규칙 — 빈 배열", () => {
 check("maxPerRule 상한이 실제로 잘린다", () => {
   const days = expandRange(rule({ freq: "daily", interval: 1 }), CREATED, WIN_FROM, WIN_TO, 10);
   assert.equal(days.length, 10);
+});
+
+check("T-22 표시 기간(from)은 주기 위상을 바꾸지 않는다", () => {
+  // 2026-07-14 는 화요일. 요일을 고르지 않은 "매주" 규칙은 기준일의 요일로 돈다.
+  const created = D("2026-07-14").getTime();
+  const bare = rule({ freq: "weekly", interval: 1 });
+  const windowed = rule({ freq: "weekly", interval: 1, from: "2026-08-01" });
+  const a = expandRange(bare, created, D("2026-08-01"), D("2026-08-31"));
+  const b = expandRange(windowed, created, D("2026-08-01"), D("2026-08-31"));
+  assert.deepEqual(keys(a), keys(b), "표시 기간만 넣었는데 발생일이 달라졌다");
+  for (const d of b) assert.equal(d.getDay(), 2, "화요일이 아니다");
+
+  // interval > 1 도 마찬가지 — 예전에는 from 이 위상을 밀었다
+  const every2 = rule({ freq: "weekly", interval: 2, weekdays: [2] });
+  const every2w = rule({
+    freq: "weekly",
+    interval: 2,
+    weekdays: [2],
+    from: "2026-07-20",
+  });
+  assert.deepEqual(
+    keys(expandRange(every2, created, D("2026-08-01"), D("2026-08-31"))),
+    keys(expandRange(every2w, created, D("2026-08-01"), D("2026-08-31"))),
+  );
+});
+
+check("T-23 anchor 없던 옛 규칙은 발생일이 그대로 유지된다", () => {
+  const created = D("2026-07-14").getTime();
+  // 예전에는 from 이 기준일을 겸했다 — 토요일로 돌던 일정
+  const legacy = withLegacyAnchor(rule({ freq: "weekly", interval: 1, from: "2026-08-01" }));
+  const days = expandRange(legacy, created, D("2026-08-01"), D("2026-08-31"));
+  assert.equal(legacy.anchor, "2026-08-01");
+  for (const d of days) assert.equal(d.getDay(), 6, "옛 규칙의 요일이 바뀌었다");
+  assert.equal(keys(days)[0], "2026-08-01");
+
+  // anchor 가 이미 있으면 건드리지 않는다
+  const explicit = rule({ freq: "weekly", interval: 1, anchor: "2026-07-14", from: "2026-08-01" });
+  assert.equal(withLegacyAnchor(explicit).anchor, "2026-07-14");
+});
+
+check("T-24 윤년 2/29 규칙에 다음 발생이 나온다", () => {
+  // 예전에는 일 단위 탐색 상한에 먼저 걸려 null 이 되고 화면에 "종료"가 떴다
+  const r = rule({ freq: "yearly", interval: 1, month: 2, day: 29 });
+  const n = nextOccurrence(r, D("2025-01-01").getTime(), D("2026-07-28"));
+  assert.ok(n, "다음 발생을 못 찾았다");
+  assert.equal(toDayString(n!), "2028-02-29");
+
+  const every4 = rule({ freq: "yearly", interval: 4, month: 2, day: 29 });
+  const n4 = nextOccurrence(every4, D("2024-02-29").getTime(), D("2026-07-28"));
+  assert.equal(n4 && toDayString(n4), "2028-02-29");
+});
+
+check("T-25 서머타임 전환일에도 시각이 벽시계 그대로다", () => {
+  // 이 검사는 DST 가 있는 지역에서만 의미가 있다. 국내(Asia/Seoul)에서는
+  // 두 계산이 어차피 같으므로 통과한다 — 회귀 방어선으로만 둔다.
+  const r = rule({ freq: "daily", interval: 1, timeMinutes: 9 * 60 });
+  const start = instanceStartMs(r, D("2026-03-08"))!;
+  const d = new Date(start);
+  assert.equal(d.getHours(), 9, "시작 시각이 벽시계와 어긋난다");
+  assert.equal(d.getMinutes(), 0);
+
+  const late = rule({ freq: "daily", interval: 1, timeMinutes: 26 * 60 });
+  const lateStart = new Date(instanceStartMs(late, D("2026-03-08"))!);
+  assert.equal(toDayString(lateStart), "2026-03-09", "26시가 다음날로 안 넘어갔다");
+  assert.equal(lateStart.getHours(), 2);
 });
 
 // ─────────────────────────────────────────────────────────────

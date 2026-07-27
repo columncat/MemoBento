@@ -27,6 +27,15 @@ export interface Recurrence {
   month?: number;
   /** 참고 시각(분). 0 ~ 1619(26:59). 없으면 시각 없음. */
   timeMinutes?: number | null;
+  /**
+   * 주기의 기준일 YYYY-MM-DD. 없으면 메모를 만든 날.
+   *
+   * 요일·일자를 고르지 않은 규칙("매주" 처럼)은 이 날의 요일/일자를 쓰고,
+   * interval > 1 이면 이 날부터 세어 위상이 정해진다. from(표시 기간)과
+   * 반드시 분리해야 한다 — 예전에는 from 이 이 역할을 겸해서, 표시 기간만
+   * 좁혀도 발생 요일이 통째로 옮겨갔다.
+   */
+  anchor?: string | null;
   /** 표시 시작일 YYYY-MM-DD. 없으면 제한 없음. */
   from?: string | null;
   /** 표시 종료일 YYYY-MM-DD (그날 포함). 없으면 제한 없음. */
@@ -115,6 +124,7 @@ export function normalizeRecurrence(input: unknown): Recurrence | null {
   if (r.timeMinutes != null) {
     out.timeMinutes = clampInt(r.timeMinutes, 0, MAX_TIME_MINUTES, 0);
   }
+  if (parseDay(r.anchor)) out.anchor = r.anchor;
   if (parseDay(r.from)) out.from = r.from;
   if (parseDay(r.to)) out.to = r.to;
 
@@ -142,9 +152,27 @@ export function formatTime(minutes: number): string {
 //   발생일 계산
 // ─────────────────────────────────────────────────────────────
 
-/** 규칙의 기준일 — from 이 있으면 그날, 없으면 만든 날. */
+/**
+ * 규칙의 기준일.
+ *
+ * from(표시 기간)은 여기에 관여하지 않는다. 예전에는 겸했는데, 그러면
+ * "9월부터 보이게" 처럼 범위만 좁혔을 때 매주 화요일이던 일정이 매주
+ * 토요일로 바뀌었다. 화면 어디에도 단서가 없어 버그로만 보인다.
+ */
 function anchorOf(rule: Recurrence, createdAt: number): Date {
-  return parseDay(rule.from) ?? startOfDay(new Date(createdAt));
+  return parseDay(rule.anchor) ?? startOfDay(new Date(createdAt));
+}
+
+/**
+ * anchor 가 없던 시절의 규칙을 지금 의미로 옮긴다.
+ *
+ * 그때는 from 이 기준일을 겸했으므로, from 을 anchor 로 굳혀야 이미 쓰던
+ * 일정의 발생일이 그대로 유지된다. 읽을 때마다 적용되고, 다음 저장 때
+ * 명시적으로 남는다.
+ */
+export function withLegacyAnchor(rule: Recurrence): Recurrence {
+  if (rule.anchor || !rule.from) return rule;
+  return { ...rule, anchor: rule.from };
 }
 
 /** 이 날짜가 표시 기간 안인가. */
@@ -213,9 +241,29 @@ export function nextOccurrence(
 ): Date | null {
   const to = parseDay(rule.to);
   const start = startOfDay(fromDay);
-  // 하루씩 훑되 상한을 둔다. 연 단위 규칙도 몇 년 안에는 잡힌다.
-  const limit = rule.freq === "yearly" ? 366 * (rule.interval + 1) + 2 : 800;
-  for (let i = 0; i < limit; i++) {
+
+  if (rule.freq === "yearly") {
+    // 하루씩 훑으면 2/29 규칙(4년에 한 번)에서 상한에 먼저 걸려 "예정 없음"이
+    // 되고, interval 이 크면 수만 번을 헛돈다. 연 단위로 후보만 본다.
+    const anchor = anchorOf(rule, createdAt);
+    const month = (rule.month ?? anchor.getMonth() + 1) - 1;
+    const day = rule.day ?? anchor.getDate();
+    const n = Math.max(1, rule.interval);
+    // 윤년 규칙은 최대 4년 간격 — interval 배수로 8회면 충분히 넘어선다
+    for (let k = 0; k <= 8; k++) {
+      const year = anchor.getFullYear() + k * n;
+      const d = new Date(year, month, day);
+      // 없는 날짜(2/29 평년)는 다음 달로 굴러가므로 걸러낸다
+      if (d.getMonth() !== month || d.getDate() !== day) continue;
+      if (d.getTime() < start.getTime()) continue;
+      if (to && d.getTime() > to.getTime()) return null;
+      if (withinWindow(rule, d) && matchesDay(rule, createdAt, d)) return d;
+    }
+    return null;
+  }
+
+  // 하루씩 훑되 상한을 둔다. 일/주/월 규칙은 2년 안에 반드시 잡힌다.
+  for (let i = 0; i < 800; i++) {
     const d = addDays(start, i);
     if (to && d.getTime() > to.getTime()) return null;
     if (withinWindow(rule, d) && matchesDay(rule, createdAt, d)) return d;
@@ -223,10 +271,21 @@ export function nextOccurrence(
   return null;
 }
 
-/** 이 발생일의 시작 시점(ms). 시각을 정하지 않았으면 null (종일). */
+/**
+ * 이 발생일의 시작 시점(ms). 시각을 정하지 않았으면 null (종일).
+ *
+ * 분을 ms 로 더하지 않고 현지 날짜 생성자에 넘긴다. 서머타임이 있는 지역에서
+ * 전환일 하루는 23 또는 25시간이라, 고정 ms 로 더하면 화면에 적힌 시각과 한
+ * 시간 어긋난다. 분이 1440 을 넘어도(26:00) 생성자가 다음날로 정규화해 준다.
+ */
 export function instanceStartMs(rule: Recurrence, day: Date): number | null {
   if (rule.timeMinutes == null) return null;
-  return startOfDay(day).getTime() + rule.timeMinutes * 60000;
+  return atMinutes(day, rule.timeMinutes);
+}
+
+function atMinutes(day: Date, minutes: number): number {
+  const b = startOfDay(day);
+  return new Date(b.getFullYear(), b.getMonth(), b.getDate(), 0, minutes).getTime();
 }
 
 /**
@@ -236,10 +295,11 @@ export function instanceStartMs(rule: Recurrence, day: Date): number | null {
  * 시점(다음날 새벽)까지 늘려 준다 — 토요일 26:00 은 일요일 02:01 까지.
  */
 export function instanceEndMs(rule: Recurrence, day: Date): number {
-  return (
-    startOfDay(day).getTime() +
-    Math.max(DAY_MS, (rule.timeMinutes ?? 0) * 60000 + 60000)
-  );
+  // 다음날 자정과 "시각 + 1분" 중 늦은 쪽. 둘 다 현지 시간으로 계산해야
+  // 서머타임 전환일에 하루가 23/25시간이어도 어긋나지 않는다.
+  const nextMidnight = addDays(day, 1).getTime();
+  const afterTime = atMinutes(day, rule.timeMinutes ?? 0) + 60000;
+  return Math.max(nextMidnight, afterTime);
 }
 
 /**

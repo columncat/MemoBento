@@ -5,6 +5,7 @@
 
 import type {
   FileKind,
+  MemoColor,
   MemoType,
   NotebookKind,
   SystemKey,
@@ -13,7 +14,7 @@ import type {
 
 import type { Recurrence } from "./recurrence";
 
-export type { FileKind, MemoType, NotebookKind, SystemKey, ViewMode };
+export type { FileKind, MemoColor, MemoType, NotebookKind, SystemKey, ViewMode };
 export type { Recurrence };
 
 export interface FileDTO {
@@ -49,6 +50,8 @@ export interface MemoDTO {
   dueAt: number | null;
   /** 반복 일정 규칙 (schedule 메모함). 없으면 null. */
   recurrence: Recurrence | null;
+  /** 지정한 글자 색. 없으면 기본색. */
+  color: MemoColor | null;
   createdAt: number;
   updatedAt: number;
   /** true = MailBento widget_state 에 저장되는 메모 (시스템 메모함과 동기화). */
@@ -209,6 +212,11 @@ export function normalizeUrl(s: string): string | null {
   } catch {
     return null;
   }
+}
+
+/** 지정한 색의 CSS 값. 색이 없으면 undefined (기본색을 그대로 쓴다). */
+export function colorVar(color: MemoColor | null): string | undefined {
+  return color ? `var(--color-tag-${color})` : undefined;
 }
 
 export function formatBytes(n: number): string {

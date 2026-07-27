@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { deleteMemo, listNotebooks, updateMemo } from "@/lib/memo-server";
+import { MEMO_COLORS } from "@/lib/db/schema";
 import { normalizeUrl } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -16,6 +17,8 @@ const patchSchema = z.object({
   dueAt: z.number().int().nullable().optional(),
   /** 반복 규칙. 서버에서 정규화하므로 형태는 느슨하게 받는다. null 이면 해제. */
   recurrence: z.unknown().optional(),
+  /** 글자 색. 팔레트 밖의 값은 거절한다 — 그대로 CSS 변수 이름이 된다. */
+  color: z.enum(MEMO_COLORS).nullable().optional(),
   notebookId: z.string().min(1).optional(),
 });
 

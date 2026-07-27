@@ -19,7 +19,7 @@ import {
   Trash2,
   Upload,
 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { activeMemoDrag } from "@/lib/dnd";
 import {
@@ -108,7 +108,11 @@ function ViewToggle({
         ];
 
   return (
-    <div className="mr-1 flex items-center rounded-md bg-(--color-bg-2) p-0.5 ring-1 ring-(--color-border-soft)">
+    <div
+      role="group"
+      aria-label="보기 방식"
+      className="mr-1 flex items-center rounded-md bg-(--color-bg-2) p-0.5 ring-1 ring-(--color-border-soft)"
+    >
       {opts.map(({ mode, Icon, label }) => (
         <button
           key={mode}
@@ -119,8 +123,10 @@ function ViewToggle({
           title={label}
           className={cn(
             "grid h-5 w-6 place-items-center rounded transition",
+            // 색만으로 구분하면 accent-soft pill 이 트랙 대비 1.2:1 수준이라
+            // 어느 쪽이 켜졌는지 알아보기 어렵다. 테두리를 두 번째 신호로 둔다.
             notebook.viewMode === mode
-              ? "bg-(--color-accent-soft) text-(--color-accent-strong)"
+              ? "bg-(--color-accent-soft) text-(--color-accent-strong) ring-1 ring-(--color-accent)"
               : "text-(--color-fg-3) hover:text-(--color-fg-2)",
           )}
         >
@@ -144,6 +150,13 @@ export function NotebookCard({
   const [editingName, setEditingName] = useState(false);
   // 인스턴스에서 규칙으로 건너왔을 때 어느 규칙이었는지 잠깐 표시
   const [highlightId, setHighlightId] = useState<string | null>(null);
+  const highlightTimer = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
+    },
+    [],
+  );
   const [draftName, setDraftName] = useState(notebook.name);
   const dragDepth = useRef(0);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -302,7 +315,7 @@ export function NotebookCard({
         // @container — 6단처럼 카드가 좁아지면 헤더 버튼을 컨테이너 폭 기준으로 접는다
         "group/card @container relative flex flex-col rounded-[var(--radius-card)] bg-(--color-surface) ring-1 ring-(--color-border-soft) transition",
         // 세로로 더 길게. 화면이 크면 한 번 더 늘린다.
-        flush ? "h-full min-h-0" : "h-[580px] xl:h-[660px] 2xl:h-[740px]",
+        flush ? "h-full min-h-0" : "h-[435px] xl:h-[495px] 2xl:h-[555px]",
         dragging && "ring-2 ring-(--color-accent)",
       )}
     >
@@ -502,7 +515,14 @@ export function NotebookCard({
           onShowRule={(memo) => {
             handlers.setViewMode(notebook.id, SCHEDULE_VIEW_MODE.rules);
             setHighlightId(memo.id);
-            window.setTimeout(() => setHighlightId(null), 2000);
+            // 연달아 누르면 앞선 타이머가 뒤 강조를 지운다
+            if (highlightTimer.current) {
+              window.clearTimeout(highlightTimer.current);
+            }
+            highlightTimer.current = window.setTimeout(
+              () => setHighlightId(null),
+              2000,
+            );
           }}
           emptyHint={
             notebook.kind === "schedule"
@@ -576,7 +596,7 @@ export function AddNotebookCard({
       <button
         type="button"
         onClick={() => setOpen(true)}
-        className="flex h-[580px] flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-(--color-border) text-(--color-fg-4) transition hover:border-(--color-accent)/60 hover:bg-(--color-surface)/40 hover:text-(--color-fg-2) xl:h-[660px] 2xl:h-[740px]"
+        className="flex h-[435px] flex-col items-center justify-center gap-2 rounded-[var(--radius-card)] border border-dashed border-(--color-border) text-(--color-fg-4) transition hover:border-(--color-accent)/60 hover:bg-(--color-surface)/40 hover:text-(--color-fg-2) xl:h-[495px] 2xl:h-[555px]"
       >
         <Plus className="h-6 w-6" />
         <span className="text-sm">새 메모함</span>
@@ -585,7 +605,7 @@ export function AddNotebookCard({
   }
 
   return (
-    <div className="flex h-[580px] flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border border-dashed border-(--color-accent)/60 bg-(--color-surface)/40 px-6 xl:h-[660px] 2xl:h-[740px]">
+    <div className="flex h-[435px] flex-col items-center justify-center gap-3 rounded-[var(--radius-card)] border border-dashed border-(--color-accent)/60 bg-(--color-surface)/40 px-6 xl:h-[495px] 2xl:h-[555px]">
       <input
         autoFocus
         value={name}

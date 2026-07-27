@@ -246,6 +246,10 @@ export function Dashboard({
         },
       },
       schedule: {
+        onColor: (memo, color) => {
+          patchMemo(memo.id, { color });
+          void run(() => api.updateMemo(memo.id, { color })).catch(() => undefined);
+        },
         onLink: (memo, url) => {
           patchMemo(memo.id, { url, iconUrl: url ? autoIconUrl(url) : null });
           void run(() => api.updateMemo(memo.id, { url })).catch(() => undefined);

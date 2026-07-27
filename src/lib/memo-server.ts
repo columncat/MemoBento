@@ -2,7 +2,10 @@ import { asc, desc, eq } from "drizzle-orm";
 
 import { db, schema } from "./db";
 import {
+  MEMO_COLORS,
   MEMO_TYPES,
+  NOTEBOOK_KINDS,
+  type MemoColor,
   type MemoType,
   type NotebookKind,
   type SystemKey,
@@ -15,7 +18,11 @@ import {
   type LegacyPin,
   type LegacyState,
 } from "./legacy-store";
-import { normalizeRecurrence, type Recurrence } from "./recurrence";
+import {
+  normalizeRecurrence,
+  withLegacyAnchor,
+  type Recurrence,
+} from "./recurrence";
 import { trashMemo, trashNotebook } from "./trash";
 import type { FileDTO, MemoDTO, NotebookDTO } from "./types";
 import { autoIconUrl, hostnameOf } from "./types";
@@ -155,7 +162,9 @@ export function listNotebooks(): NotebookDTO[] {
 function parseRecurrenceColumn(raw: string | null): Recurrence | null {
   if (!raw) return null;
   try {
-    return normalizeRecurrence(JSON.parse(raw));
+    const rule = normalizeRecurrence(JSON.parse(raw));
+    // anchor 가 없던 시절 규칙은 from 이 기준일을 겸했다 — 그대로 굳혀 준다
+    return rule ? withLegacyAnchor(rule) : null;
   } catch {
     return null;
   }
@@ -185,6 +194,7 @@ function loadDbMemos(): Map<string, MemoDTO[]> {
       done: r.memos.done === 1,
       dueAt: r.memos.dueAt ? r.memos.dueAt.getTime() : null,
       recurrence: parseRecurrenceColumn(r.memos.recurrence),
+      color: r.memos.color,
       createdAt: r.memos.createdAt.getTime(),
       updatedAt: r.memos.updatedAt.getTime(),
       legacy: false,
@@ -220,6 +230,7 @@ function pinToDto(p: LegacyPin, notebookId: string): MemoDTO {
     done: false,
     dueAt: null,
     recurrence: null,
+    color: null,
     createdAt: 0,
     updatedAt: 0,
     legacy: true,
@@ -239,6 +250,7 @@ function legacyMemoToDto(m: LegacyMemo, notebookId: string): MemoDTO {
     done: false,
     dueAt: null,
     recurrence: null,
+    color: null,
     createdAt: m.createdAt,
     updatedAt: m.createdAt,
     legacy: true,
@@ -444,6 +456,8 @@ export interface UpdateMemoInput {
   dueAt?: number | null;
   /** 반복 일정 규칙. null 이면 해제. */
   recurrence?: unknown;
+  /** 글자 색. null 이면 기본색으로 되돌린다. */
+  color?: MemoColor | null;
   /** 다른 메모함으로 이동. */
   notebookId?: string;
 }
@@ -468,6 +482,7 @@ export function updateMemo(id: string, patch: UpdateMemoInput): void {
     if (patch.dueAt !== undefined) {
       set.dueAt = patch.dueAt === null ? null : new Date(patch.dueAt);
     }
+    if (patch.color !== undefined) set.color = patch.color;
     if (patch.recurrence !== undefined) {
       if (patch.recurrence === null) {
         set.recurrence = null;
@@ -700,6 +715,8 @@ export interface BackupPayload {
     id: string;
     name: string;
     systemKey: SystemKey | null;
+    /** 메모함 종류. 구버전 백업에는 없다 — 그때는 전부 일반 메모함이었다. */
+    kind?: NotebookKind;
     viewMode: ViewMode;
     position: number;
     memos: {
@@ -711,6 +728,15 @@ export interface BackupPayload {
       iconUrl: string | null;
       /** 파일 메타데이터만. 바이트는 data 볼륨에 그대로 남는다. */
       file: FileDTO | null;
+      /** 체크리스트·TODO 완료 여부. 구버전 백업에는 없다. */
+      done?: boolean;
+      /** TODO 기한. 구버전 백업에는 없다. */
+      dueAt?: number | null;
+      /** 반복 일정 규칙. 구버전 백업에는 없다. */
+      recurrence?: Recurrence | null;
+      /** 글자 색. 구버전 백업에는 없다. */
+      color?: MemoColor | null;
+      position?: number;
       createdAt: number;
     }[];
   }[];
@@ -728,11 +754,12 @@ export function exportBackup(): BackupPayload {
       id: nb.id,
       name: nb.name,
       systemKey: nb.systemKey,
+      kind: nb.kind,
       viewMode: nb.viewMode,
       position: nb.position,
       memos: nb.memos
         .filter((m) => !m.legacy) // 레거시 메모는 widget 필드로 나감 (중복 방지)
-        .map((m) => ({
+        .map((m, i) => ({
           id: m.id,
           type: m.type,
           text: m.text,
@@ -740,6 +767,11 @@ export function exportBackup(): BackupPayload {
           url: m.url,
           iconUrl: m.iconUrl,
           file: m.file,
+          done: m.done,
+          dueAt: m.dueAt,
+          recurrence: m.recurrence,
+          color: m.color,
+          position: i,
           createdAt: m.createdAt,
         })),
     })),
@@ -774,22 +806,25 @@ export function importNotebooks(input: BackupPayload["notebooks"]): number {
         .where(eq(schema.notebooks.id, id))
         .run();
     } else {
+      // 구버전 백업에는 kind 가 없다 — 그때는 전부 일반 메모함이었다.
+      // 알 수 없는 값이 오면 되돌릴 수 없으므로 화이트리스트로 거른다.
+      const kind: NotebookKind =
+        nb.kind && (NOTEBOOK_KINDS as readonly string[]).includes(nb.kind)
+          ? nb.kind
+          : "memo";
+      // 메모함을 만들 때와 같은 규칙 — 한 줄짜리 종류는 그리드가 없다
+      const viewMode = kind === "memo" ? nb.viewMode : "list";
       db.insert(schema.notebooks)
-        .values({
-          id,
-          name: nb.name,
-          viewMode: nb.viewMode,
-          position: nb.position ?? i,
-        })
+        .values({ id, name: nb.name, kind, viewMode, position: nb.position ?? i })
         .onConflictDoUpdate({
           target: schema.notebooks.id,
-          set: { name: nb.name, viewMode: nb.viewMode, position: nb.position ?? i },
+          set: { name: nb.name, kind, viewMode, position: nb.position ?? i },
         })
         .run();
       count++;
     }
 
-    for (const m of nb.memos ?? []) {
+    (nb.memos ?? []).forEach((m, mi) => {
       // 첨부는 files 행이 남아 있을 때만 연결한다 (다른 인스턴스로 옮긴 경우 방지)
       const fileId = m.file?.id ?? null;
       const fileExists =
@@ -805,11 +840,25 @@ export function importNotebooks(input: BackupPayload["notebooks"]): number {
           url: m.url ?? null,
           iconUrl: m.iconUrl ?? null,
           fileId: fileExists ? fileId : null,
+          done: m.done ? 1 : 0,
+          dueAt: m.dueAt != null ? new Date(m.dueAt) : null,
+          // 알아볼 수 없는 규칙은 버린다 — 손댄 백업이 그대로 들어오지 않게
+          recurrence: m.recurrence
+            ? (() => {
+                const r = normalizeRecurrence(m.recurrence);
+                return r ? JSON.stringify(r) : null;
+              })()
+            : null,
+          color:
+            m.color && (MEMO_COLORS as readonly string[]).includes(m.color)
+              ? m.color
+              : null,
+          position: m.position ?? mi,
           createdAt: new Date(m.createdAt || Date.now()),
         })
         .onConflictDoNothing()
         .run();
-    }
+    });
   });
   return count;
 }

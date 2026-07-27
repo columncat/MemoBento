@@ -29,6 +29,40 @@ export interface TrashEntry {
   restorable: boolean;
 }
 
+/**
+ * 스냅샷 행 타입은 **스키마에서 파생한다**.
+ *
+ * 예전에는 컬럼을 손으로 나열했는데, 그러면 컬럼이 늘어날 때마다 조용히
+ * 빠진다. 실제로 kind / recurrence / done / dueAt 이 그렇게 빠져서, 반복 일정
+ * 메모함을 지웠다 되살리면 평범한 메모함이 되고 주기·완료·기한이 사라졌다.
+ * 타입을 파생시켜 두면 다음 컬럼은 컴파일 단계에서 걸린다.
+ */
+type Snap<T> = { [K in keyof T]: T[K] extends Date ? number : T[K] };
+
+type MemoRowSnapshot = Snap<typeof schema.memos.$inferSelect>;
+type NotebookRowSnapshot = Snap<typeof schema.notebooks.$inferSelect>;
+
+const snapMemo = (m: typeof schema.memos.$inferSelect): MemoRowSnapshot => ({
+  ...m,
+  createdAt: m.createdAt.getTime(),
+  updatedAt: m.updatedAt.getTime(),
+});
+
+const snapNotebook = (
+  n: typeof schema.notebooks.$inferSelect,
+): NotebookRowSnapshot => ({
+  ...n,
+  createdAt: n.createdAt.getTime(),
+  updatedAt: n.updatedAt.getTime(),
+});
+
+/** 스냅샷을 다시 행으로. 오래된 스냅샷은 빠진 필드를 스키마 기본값으로 채운다. */
+const unsnapMemo = (m: MemoRowSnapshot) => ({
+  ...m,
+  createdAt: new Date(m.createdAt),
+  updatedAt: new Date(m.updatedAt ?? m.createdAt),
+});
+
 interface MemoSnapshot {
   /** 레거시(widget_state)에 살던 메모인가. */
   legacy: boolean;
@@ -37,29 +71,12 @@ interface MemoSnapshot {
   /** 원래 배열에서의 위치 — 복원 시 같은 자리에 넣는다. */
   legacyIndex?: number;
   legacyItem?: unknown;
-  row?: {
-    id: string;
-    notebookId: string;
-    type: MemoType;
-    text: string | null;
-    title: string | null;
-    url: string | null;
-    iconUrl: string | null;
-    fileId: string | null;
-    position: number;
-    createdAt: number;
-  };
+  row?: MemoRowSnapshot;
 }
 
 interface NotebookSnapshot {
-  notebook: {
-    id: string;
-    name: string;
-    viewMode: ViewMode;
-    position: number;
-    createdAt: number;
-  };
-  memos: NonNullable<MemoSnapshot["row"]>[];
+  notebook: NotebookRowSnapshot;
+  memos: MemoRowSnapshot[];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -82,25 +99,8 @@ export function trashNotebook(notebookId: string): void {
     .all();
 
   const snapshot: NotebookSnapshot = {
-    notebook: {
-      id: nb.id,
-      name: nb.name,
-      viewMode: nb.viewMode,
-      position: nb.position,
-      createdAt: nb.createdAt.getTime(),
-    },
-    memos: rows.map((m) => ({
-      id: m.id,
-      notebookId: m.notebookId,
-      type: m.type,
-      text: m.text,
-      title: m.title,
-      url: m.url,
-      iconUrl: m.iconUrl,
-      fileId: m.fileId,
-      position: m.position,
-      createdAt: m.createdAt.getTime(),
-    })),
+    notebook: snapNotebook(nb),
+    memos: rows.map(snapMemo),
   };
 
   db.insert(schema.trash)
@@ -132,21 +132,7 @@ export function trashMemo(
       .where(eq(schema.memos.id, memoId))
       .get();
     if (!m) throw new Error("메모를 찾을 수 없습니다");
-    snapshot = {
-      legacy: false,
-      row: {
-        id: m.id,
-        notebookId: m.notebookId,
-        type: m.type,
-        text: m.text,
-        title: m.title,
-        url: m.url,
-        iconUrl: m.iconUrl,
-        fileId: m.fileId,
-        position: m.position,
-        createdAt: m.createdAt.getTime(),
-      },
-    };
+    snapshot = { legacy: false, row: snapMemo(m) };
     db.delete(schema.memos).where(eq(schema.memos.id, memoId)).run();
   } else {
     const state = getLegacyState();
@@ -227,21 +213,19 @@ export function restoreFromTrash(trashId: string): void {
 
   if (row.kind === "notebook") {
     const snap = JSON.parse(row.payload) as NotebookSnapshot;
+    const n = snap.notebook;
     db.insert(schema.notebooks)
       .values({
-        id: snap.notebook.id,
-        name: snap.notebook.name,
-        viewMode: snap.notebook.viewMode,
-        position: snap.notebook.position,
-        createdAt: new Date(snap.notebook.createdAt),
+        ...n,
+        // 오래된 스냅샷에는 kind 가 없다 — 그때는 전부 일반 메모함이었다
+        kind: n.kind ?? "memo",
+        createdAt: new Date(n.createdAt),
+        updatedAt: new Date(n.updatedAt ?? n.createdAt),
       })
       .onConflictDoNothing()
       .run();
     for (const m of snap.memos) {
-      db.insert(schema.memos)
-        .values({ ...m, createdAt: new Date(m.createdAt) })
-        .onConflictDoNothing()
-        .run();
+      db.insert(schema.memos).values(unsnapMemo(m)).onConflictDoNothing().run();
     }
   } else {
     const snap = JSON.parse(row.payload) as MemoSnapshot;
@@ -263,7 +247,7 @@ export function restoreFromTrash(trashId: string): void {
         throw new Error("원래 메모함이 없습니다 — 메모함을 먼저 복원하세요");
       }
       db.insert(schema.memos)
-        .values({ ...snap.row, createdAt: new Date(snap.row.createdAt) })
+        .values(unsnapMemo(snap.row))
         .onConflictDoNothing()
         .run();
     }

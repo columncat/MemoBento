@@ -17,6 +17,23 @@ export type SystemKey = (typeof SYSTEM_KEYS)[number];
 export const MEMO_TYPES = ["text", "link", "image", "pdf", "file"] as const;
 export type MemoType = (typeof MEMO_TYPES)[number];
 
+/**
+ * 항목에 지정할 수 있는 글자 색.
+ * 값은 CSS 변수 이름의 꼬리표로 쓰인다 (--color-tag-red 등). 밝기는 모드별로
+ * globals.css 가 정하므로, 라이트/다크 어디서도 대비가 무너지지 않는다.
+ */
+export const MEMO_COLORS = [
+  "red",
+  "orange",
+  "amber",
+  "green",
+  "teal",
+  "blue",
+  "violet",
+  "pink",
+] as const;
+export type MemoColor = (typeof MEMO_COLORS)[number];
+
 /** 첨부 파일 분류 — 확장자로 판별하며 열람 가능 여부를 결정한다. */
 export const FILE_KINDS = ["image", "pdf", "text", "file"] as const;
 export type FileKind = (typeof FILE_KINDS)[number];
@@ -111,6 +128,8 @@ export const memos = sqliteTable(
      * 필드가 여럿이고 늘어날 여지가 있어 컬럼을 쪼개지 않는다.
      */
     recurrence: text("recurrence"),
+    /** 글자 색. null 이면 기본색. */
+    color: text("color", { enum: MEMO_COLORS }),
     position: integer("position").notNull().default(0),
     createdAt: integer("created_at", { mode: "timestamp" })
       .notNull()

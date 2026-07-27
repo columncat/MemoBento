@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, Link2, Pencil, Repeat, Trash2 } from "lucide-react";
+import { Clock, Link2, Palette, Pencil, Repeat, Trash2 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
@@ -11,13 +11,22 @@ import {
   describeWindow,
   formatTime,
   nextOccurrence,
+  parseDay,
   parseTimeInput,
+  toDayString,
   WEEKDAY_LABELS,
   type Freq,
   type Recurrence,
 } from "@/lib/recurrence";
 import type { InstanceState } from "@/lib/schedule-instances";
-import { hostnameOf, normalizeUrl, type MemoDTO } from "@/lib/types";
+import { MEMO_COLORS } from "@/lib/db/schema";
+import {
+  colorVar,
+  hostnameOf,
+  normalizeUrl,
+  type MemoColor,
+  type MemoDTO,
+} from "@/lib/types";
 import { cn } from "@/lib/utils";
 
 import { DragHandle, type MemoActions } from "./memo-item";
@@ -27,6 +36,8 @@ export interface ScheduleActions {
   onRule: (memo: MemoDTO, rule: Recurrence | null) => void;
   /** 링크 저장 / 해제. */
   onLink: (memo: MemoDTO, url: string | null) => void;
+  /** 글자 색 지정 / 해제. */
+  onColor: (memo: MemoDTO, color: MemoColor | null) => void;
   /** 본문 수정. */
   onRename: (memo: MemoDTO, text: string) => void;
 }
@@ -71,6 +82,8 @@ export function ScheduleRow({
   memoActions,
   variant = "rule",
   now,
+  day,
+  dayLabel,
   state,
   highlight = false,
   dnd,
@@ -83,6 +96,10 @@ export function ScheduleRow({
   variant?: ScheduleVariant;
   /** 목록에서 한 번만 계산해 내려주는 "지금". null 이면 시간 의존 표시를 그리지 않는다. */
   now: Date | null;
+  /** variant="instance" 일 때 이 발생일. */
+  day?: Date;
+  /** variant="instance" 일 때 날짜 라벨 (오늘/내일/9-12 …). */
+  dayLabel?: string;
   /** variant="instance" 일 때 이 발생의 상태. */
   state?: InstanceState;
   /** 인스턴스에서 규칙으로 건너왔을 때 잠깐 표시. */
@@ -98,6 +115,7 @@ export function ScheduleRow({
   const [draft, setDraft] = useState(memo.text ?? "");
   const [ruleOpen, setRuleOpen] = useState(false);
   const [linkOpen, setLinkOpen] = useState(false);
+  const [colorOpen, setColorOpen] = useState(false);
 
   const rule = memo.recurrence;
   const isRuleView = variant === "rule";
@@ -109,16 +127,40 @@ export function ScheduleRow({
     () => (isRuleView && rule && now ? activeToday(rule, memo.createdAt, now) : null),
     [isRuleView, rule, memo.createdAt, now],
   );
+  // nextOccurrence 는 안에서 날짜만 본다. now 를 그대로 의존성에 넣으면 매분
+  // 새 객체라 메모가 늘 무효화돼 목록 전체가 분마다 다시 계산된다.
+  const nowDay = now ? toDayString(now) : null;
+  const hasToday = !!today;
   const next = useMemo(
     () =>
-      isRuleView && rule && now && !today
-        ? nextOccurrence(rule, memo.createdAt, now)
+      isRuleView && rule && nowDay && !hasToday
+        ? nextOccurrence(rule, memo.createdAt, parseDay(nowDay)!)
         : null,
-    [isRuleView, rule, memo.createdAt, now, today],
+    [isRuleView, rule, memo.createdAt, nowDay, hasToday],
   );
   const soon = next && now ? daysUntil(next, now) <= 2 : false;
 
   const href = safeHref(memo.url);
+  // 링크가 붙어 있으면 본문 클릭이 곧 링크다. 규칙 뷰에서 본문을 고치려면
+  // 연필 버튼을 쓴다 — 클릭 한 번에 두 뜻을 담을 수는 없다.
+  const bodyIsLink = !!href;
+  const isNow = state === "live" || dayLabel === "오늘";
+
+  const onBody = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (href) {
+      window.open(href, "_blank", "noopener,noreferrer");
+      return;
+    }
+    if (!isRuleView) {
+      // 인스턴스는 계산 결과다. 여기서 고치면 나머지 발생이 전부 함께 바뀌는데,
+      // 사용자는 "그날만 고쳤다"고 읽는다.
+      onShowRule?.(memo);
+      return;
+    }
+    setDraft(memo.text ?? "");
+    setEditing(true);
+  };
 
   const commit = () => {
     setEditing(false);
@@ -131,12 +173,13 @@ export function ScheduleRow({
     <li
       {...dnd}
       className={cn(
-        "group relative flex min-h-8 items-center gap-1.5 rounded-md border-l-2 border-transparent px-2 py-1.5 transition hover:bg-(--color-surface-hi)",
+        "group relative flex min-h-11 items-center gap-2 rounded-lg border-l-[3px] border-transparent px-2.5 py-2 transition hover:bg-(--color-surface-hi)",
         today && "border-(--color-accent)",
-        soon && !today && "border-(--color-accent)/40",
+        // 알파를 쓰면 밝은 배경에서 사실상 사라진다. 점선으로 위계를 만든다.
+        soon && !today && "border-dotted border-(--color-accent)",
         state === "live" && "border-(--color-accent)",
-        // 열린 편집기가 sticky 날짜 헤더 아래로 깔리지 않게
-        (ruleOpen || linkOpen) && "z-40",
+        // 열린 편집기가 다른 행 위로 오도록
+        (ruleOpen || linkOpen || colorOpen) && "z-40",
         highlight && "ring-1 ring-(--color-accent)",
       )}
     >
@@ -144,17 +187,34 @@ export function ScheduleRow({
         <DragHandle handleProps={handleProps} className="h-4 @max-[300px]:hidden" />
       )}
 
-      <span
-        className={cn(
-          "grid h-4.5 w-4.5 shrink-0 place-items-center rounded-full",
-          today || state === "live"
-            ? "bg-(--color-accent) text-(--color-bg)"
-            : "bg-(--color-bg-2) text-(--color-fg-3)",
-        )}
-        aria-hidden
-      >
-        <Repeat className="h-3 w-3" />
-      </span>
+      {/* 인스턴스는 날짜 머리글 없이 한 줄씩 늘어서므로 날짜를 직접 단다 */}
+      {!isRuleView && day ? (
+        <span
+          className={cn(
+            "flex w-14 shrink-0 flex-col items-center rounded-md px-1 py-0.5 leading-tight",
+            isNow
+              ? "bg-(--color-accent) text-(--color-bg)"
+              : "bg-(--color-bg-2) text-(--color-fg-2)",
+          )}
+        >
+          <span className="text-[11px] font-medium break-keep">{dayLabel}</span>
+          <span className="font-mono text-[11px] tabular-nums opacity-80">
+            {day.getMonth() + 1}/{day.getDate()}
+          </span>
+        </span>
+      ) : (
+        <span
+          className={cn(
+            "grid h-5 w-5 shrink-0 place-items-center rounded-full",
+            today
+              ? "bg-(--color-accent) text-(--color-bg)"
+              : "bg-(--color-bg-2) text-(--color-fg-3)",
+          )}
+          aria-hidden
+        >
+          <Repeat className="h-3.5 w-3.5" />
+        </span>
+      )}
 
       {isRuleView && editing ? (
         <input
@@ -170,29 +230,36 @@ export function ScheduleRow({
               setEditing(false);
             }
           }}
-          className="min-w-0 flex-1 rounded bg-(--color-bg-2) px-1.5 py-0.5 text-sm text-(--color-fg) ring-1 ring-(--color-accent)/60 outline-none"
+          className="min-w-0 flex-1 rounded bg-(--color-bg-2) px-1.5 py-1 text-[15px] text-(--color-fg) ring-1 ring-(--color-accent)/60 outline-none"
         />
       ) : (
         <span
-          onClick={(e) => {
-            e.stopPropagation();
-            if (!isRuleView) {
-              // 인스턴스는 계산 결과다. 여기서 고치면 나머지 발생이 전부 함께
-              // 바뀌는데, 사용자는 "그날만 고쳤다"고 읽는다.
-              onShowRule?.(memo);
-              return;
-            }
-            setDraft(memo.text ?? "");
-            setEditing(true);
-          }}
+          onClick={onBody}
+          role={bodyIsLink ? "link" : undefined}
+          tabIndex={bodyIsLink ? 0 : undefined}
+          onKeyDown={
+            bodyIsLink
+              ? (e) => {
+                  if (e.key === "Enter" || e.key === " ") {
+                    e.preventDefault();
+                    onBody(e as unknown as React.MouseEvent);
+                  }
+                }
+              : undefined
+          }
+          style={{ color: colorVar(memo.color) }}
           className={cn(
-            "min-w-0 flex-1 truncate text-sm leading-snug break-keep select-text @max-[300px]:line-clamp-2 @max-[300px]:overflow-visible @max-[300px]:whitespace-normal",
-            isRuleView ? "cursor-text" : "cursor-pointer",
-            today || state === "live"
-              ? "font-medium text-(--color-fg)"
-              : "text-(--color-fg-2)",
+            "min-w-0 flex-1 truncate text-[15px] leading-snug break-keep select-text @max-[300px]:line-clamp-2 @max-[300px]:overflow-visible @max-[300px]:whitespace-normal",
+            isRuleView && !bodyIsLink ? "cursor-text" : "cursor-pointer",
+            bodyIsLink && "hover:underline",
+            today || state === "live" ? "font-medium" : undefined,
+            // 색을 지정하면 인라인 style 이 이긴다 — 기본색만 클래스로 준다
+            !memo.color &&
+              (today || state === "live"
+                ? "text-(--color-fg)"
+                : "text-(--color-fg-2)"),
           )}
-          title={memo.text ?? ""}
+          title={bodyIsLink ? `${memo.text ?? ""} — ${hostnameOf(href!)}` : (memo.text ?? "")}
         >
           {memo.text}
         </span>
@@ -201,39 +268,71 @@ export function ScheduleRow({
       {/* 시각 — 참고용이라 지나도 그대로 둔다 */}
       {rule?.timeMinutes != null && (
         <span
-          className="flex shrink-0 items-center gap-0.5 font-mono text-[12px] tabular-nums text-(--color-fg-2) @max-[380px]:hidden"
+          className="flex shrink-0 items-center gap-0.5 font-mono text-[12px] tabular-nums text-(--color-fg-2)"
           title={
             rule.timeMinutes >= 24 * 60
               ? `다음날 ${formatTime(rule.timeMinutes - 24 * 60)} (참고용)`
               : "참고용 시각"
           }
         >
-          <Clock className="h-3 w-3" />
+          {/* 좁아지면 아이콘만 접는다. 인스턴스 목록에서 시각은 그 행의
+              유일한 시간 정보라 통째로 숨기면 대체 경로가 없다. */}
+          <Clock className="h-3 w-3 @max-[380px]:hidden" />
           {formatTime(rule.timeMinutes)}
         </span>
       )}
 
-      {/* 링크 */}
+      {/* 링크 표시 — 본문 클릭이 곧 링크라 여기서는 표식만 */}
       {href ? (
-        <a
-          href={href}
-          target="_blank"
-          rel="noopener noreferrer"
-          onClick={(e) => e.stopPropagation()}
-          title={hostnameOf(href)}
-          aria-label={`링크 열기 — ${hostnameOf(href)}`}
-          className="shrink-0 rounded px-1 py-0.5 text-(--color-fg-3) transition hover:text-(--color-accent-strong)"
-        >
-          <Link2 className="h-3.5 w-3.5" />
-        </a>
+        <Link2
+          className="h-3.5 w-3.5 shrink-0 text-(--color-fg-3)"
+          aria-hidden
+        />
       ) : memo.url ? (
         <span
-          className="shrink-0 px-1 text-[12px] text-(--color-fg-3)"
+          className="shrink-0 px-1 text-[12px] text-(--color-warn)"
           title={`열 수 없는 주소입니다: ${memo.url}`}
+          aria-label={`열 수 없는 주소입니다: ${memo.url}`}
         >
           링크?
         </span>
       ) : null}
+
+      {isRuleView && bodyIsLink && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setDraft(memo.text ?? "");
+            setEditing(true);
+          }}
+          className="shrink-0 rounded px-1 py-0.5 text-(--color-fg-3) opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:text-(--color-fg)"
+          aria-label="내용 수정"
+          title="내용 수정"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+      )}
+
+      {isRuleView && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setColorOpen((v) => !v);
+            setRuleOpen(false);
+            setLinkOpen(false);
+          }}
+          className="shrink-0 rounded px-1 py-0.5 opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100"
+          aria-label="글자 색"
+          title="글자 색"
+        >
+          <Palette
+            className="h-3.5 w-3.5"
+            style={{ color: colorVar(memo.color) }}
+          />
+        </button>
+      )}
 
       {isRuleView && (
         <button
@@ -242,12 +341,13 @@ export function ScheduleRow({
             e.stopPropagation();
             setLinkOpen((v) => !v);
             setRuleOpen(false);
+            setColorOpen(false);
           }}
           className="shrink-0 rounded px-1 py-0.5 text-(--color-fg-3) opacity-0 transition group-hover:opacity-100 focus-visible:opacity-100 hover:text-(--color-fg)"
           aria-label={memo.url ? "링크 편집" : "링크 추가"}
           title={memo.url ? "링크 편집" : "링크 추가"}
         >
-          {memo.url ? <Pencil className="h-3.5 w-3.5" /> : <Link2 className="h-3.5 w-3.5" />}
+          <Link2 className="h-3.5 w-3.5" />
         </button>
       )}
 
@@ -259,6 +359,7 @@ export function ScheduleRow({
             e.stopPropagation();
             setRuleOpen((v) => !v);
             setLinkOpen(false);
+            setColorOpen(false);
           }}
           className={cn(
             "shrink-0 rounded px-1.5 py-0.5 text-[12px] transition",
@@ -304,8 +405,9 @@ export function ScheduleRow({
                 ? "bg-(--color-accent-soft) font-medium text-(--color-accent-strong)"
                 : "bg-(--color-bg-2) text-(--color-fg-2)",
           )}
+          title={describeWindow(rule) ? `표시 기간 ${describeWindow(rule)}` : undefined}
         >
-          {today ? describeWindow(rule) || "오늘" : next ? describeNext(next, now) : "종료"}
+          {today ? "오늘" : next ? describeNext(next, now) : "예정 없음"}
         </span>
       )}
 
@@ -327,6 +429,7 @@ export function ScheduleRow({
       {ruleOpen && (
         <RuleEditor
           value={rule ?? DEFAULT_RULE}
+          createdAt={memo.createdAt}
           onCancel={() => setRuleOpen(false)}
           onClear={() => {
             actions.onRule(memo, null);
@@ -336,6 +439,17 @@ export function ScheduleRow({
             actions.onRule(memo, saved);
             setRuleOpen(false);
           }}
+        />
+      )}
+
+      {colorOpen && (
+        <ColorPicker
+          value={memo.color}
+          onPick={(color) => {
+            actions.onColor(memo, color);
+            setColorOpen(false);
+          }}
+          onCancel={() => setColorOpen(false)}
         />
       )}
 
@@ -386,6 +500,69 @@ function Popover({
     >
       {children}
     </div>
+  );
+}
+
+const COLOR_LABELS: Record<MemoColor, string> = {
+  red: "빨강",
+  orange: "주황",
+  amber: "노랑",
+  green: "초록",
+  teal: "청록",
+  blue: "파랑",
+  violet: "보라",
+  pink: "분홍",
+};
+
+/** 글자 색 팔레트. */
+function ColorPicker({
+  value,
+  onPick,
+  onCancel,
+}: {
+  value: MemoColor | null;
+  onPick: (color: MemoColor | null) => void;
+  onCancel: () => void;
+}) {
+  return (
+    <Popover onCancel={onCancel} className="w-52">
+      <div className="flex flex-col gap-2">
+        <div className="text-[12px] font-medium text-(--color-fg-2)">글자 색</div>
+        <div className="grid grid-cols-4 gap-1.5">
+          {MEMO_COLORS.map((c) => (
+            <button
+              key={c}
+              type="button"
+              onClick={() => onPick(c)}
+              aria-pressed={value === c}
+              aria-label={COLOR_LABELS[c]}
+              title={COLOR_LABELS[c]}
+              className={cn(
+                "grid h-8 place-items-center rounded-lg text-[15px] font-semibold transition",
+                value === c
+                  ? "bg-(--color-surface-hi) ring-2 ring-(--color-accent)"
+                  : "bg-(--color-bg-2) hover:bg-(--color-surface-hi)",
+              )}
+              style={{ color: `var(--color-tag-${c})` }}
+            >
+              가
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          onClick={() => onPick(null)}
+          className={cn(
+            "rounded-lg py-1.5 text-[12px] transition",
+            value === null
+              ? "bg-(--color-surface-hi) text-(--color-fg-2) ring-1 ring-(--color-accent)"
+              : "text-(--color-fg-3) hover:bg-(--color-surface-hi)",
+          )}
+        >
+          기본색
+        </button>
+      </div>
+    </Popover>
   );
 }
 
@@ -445,7 +622,7 @@ function LinkEditor({
           <button
             type="button"
             onClick={save}
-            className="flex-1 rounded-lg bg-(--color-accent) py-1.5 font-medium text-(--color-bg) transition hover:opacity-90"
+            className="flex-1 rounded-lg bg-(--color-accent) py-1.5 font-medium text-(--color-bg) transition hover:bg-(--color-accent-strong)"
           >
             저장
           </button>
@@ -466,18 +643,27 @@ function LinkEditor({
 /** 규칙 편집기. */
 function RuleEditor({
   value,
+  createdAt,
   onSave,
   onClear,
   onCancel,
 }: {
   value: Recurrence;
+  /** 요일·일자를 고르지 않았을 때 기준이 되는 날. */
+  createdAt: number;
   onSave: (rule: Recurrence) => void;
   onClear: () => void;
   onCancel: () => void;
 }) {
+  // 기준일은 명시된 anchor, 없으면 만든 날. 표시 기간(from)은 관여하지 않는다.
+  const anchorDay = parseDay(value.anchor) ?? new Date(createdAt);
   const [freq, setFreq] = useState<Freq>(value.freq);
   const [interval, setInterval] = useState(String(value.interval));
-  const [weekdays, setWeekdays] = useState<number[]>(value.weekdays ?? []);
+  // 요일을 고르지 않은 규칙은 기준일의 요일로 돈다. 비워 두면 화면에 아무
+  // 단서가 없어 왜 그 요일인지 알 수 없으므로 미리 눌러 보여 준다.
+  const [weekdays, setWeekdays] = useState<number[]>(
+    value.weekdays ?? (value.freq === "weekly" ? [anchorDay.getDay()] : []),
+  );
   const [day, setDay] = useState(value.day ? String(value.day) : "");
   const [month, setMonth] = useState(value.month ? String(value.month) : "");
   const [time, setTime] = useState(
@@ -498,6 +684,9 @@ function RuleEditor({
       return;
     }
     onSave({
+      // 기준일은 사용자가 건드리지 않는다. 여기서 흘리면 다음 저장 때
+      // 만든 날로 되돌아가면서 발생 요일이 바뀐다.
+      anchor: value.anchor ?? null,
       freq,
       interval: Math.max(1, Number(interval) || 1),
       weekdays:
@@ -661,7 +850,7 @@ function RuleEditor({
           <button
             type="button"
             onClick={save}
-            className="flex-1 rounded-lg bg-(--color-accent) py-1.5 font-medium text-(--color-bg) transition hover:opacity-90"
+            className="flex-1 rounded-lg bg-(--color-accent) py-1.5 font-medium text-(--color-bg) transition hover:bg-(--color-accent-strong)"
           >
             저장
           </button>

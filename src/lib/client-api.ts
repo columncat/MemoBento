@@ -1,4 +1,4 @@
-import type { NotebookDTO, NotebookKind, ViewMode } from "./types";
+import type { MemoColor, NotebookDTO, NotebookKind, ViewMode } from "./types";
 
 /**
  * 모든 변경 API 는 갱신된 메모함 전체 목록을 돌려준다.
@@ -57,6 +57,7 @@ export const api = {
       done?: boolean;
       dueAt?: number | null;
       recurrence?: unknown;
+      color?: MemoColor | null;
       notebookId?: string;
     },
   ) => mutate(`/api/memos/${encodeURIComponent(id)}`, jsonInit("PATCH", patch)),
