@@ -9,7 +9,8 @@ export const dynamic = "force-dynamic";
 const patchSchema = z.object({
   text: z.string().max(20000).optional(),
   title: z.string().max(200).optional(),
-  url: z.string().trim().optional(),
+  /** null 또는 빈 문자열이면 링크 해제. */
+  url: z.string().trim().nullable().optional(),
   done: z.boolean().optional(),
   /** null 이면 기한 해제. */
   dueAt: z.number().int().nullable().optional(),
@@ -30,14 +31,19 @@ export async function PATCH(
 
   const patch = { ...parsed.data };
   if (patch.url !== undefined) {
-    const url = normalizeUrl(patch.url);
-    if (!url) {
-      return NextResponse.json(
-        { error: "올바른 URL 이 아닙니다" },
-        { status: 400 },
-      );
+    if (!patch.url) {
+      // 빈 값은 해제 의도다. 예전엔 400 이라 한 번 붙인 링크를 뗄 수 없었다.
+      patch.url = null;
+    } else {
+      const url = normalizeUrl(patch.url);
+      if (!url) {
+        return NextResponse.json(
+          { error: "올바른 URL 이 아닙니다" },
+          { status: 400 },
+        );
+      }
+      patch.url = url;
     }
-    patch.url = url;
   }
 
   try {

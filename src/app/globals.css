@@ -141,6 +141,11 @@
      ============================================================ */
   .mode-light {
     color-scheme: light;
+    /* warn/danger 는 @theme 에서 한 번만 정의돼 밝은 배경에서 대비가 각각
+       1.53:1 / 2.73:1 로 사실상 보이지 않았다. hue 는 테마와 무관하므로
+       라이트 공통 블록 한 곳에서만 어둡게 잡는다. */
+    --color-danger: oklch(0.52 0.20 25);
+    --color-warn:   oklch(0.52 0.14 70);
   }
 
   .theme-forest.mode-light {

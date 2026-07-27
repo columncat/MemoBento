@@ -73,7 +73,8 @@ function daysBetween(a: Date, b: Date): number {
   return Math.round((startOfDay(b).getTime() - startOfDay(a).getTime()) / DAY_MS);
 }
 
-function addDays(d: Date, n: number): Date {
+/** n일 뒤(음수면 앞). setDate 기반이라 DST 전환일에도 날짜가 밀리지 않는다. */
+export function addDays(d: Date, n: number): Date {
   const x = startOfDay(d);
   x.setDate(x.getDate() + n);
   return x;
@@ -181,6 +182,8 @@ export function matchesDay(
     }
 
     case "monthly": {
+      // 없는 날짜는 그 달을 건너뛴다 — 31일 규칙은 2·4·6·9·11월에 발생하지 않는다.
+      // 말일로 당기지 않는 쪽이 RFC 5545 BYMONTHDAY 및 구글/애플 캘린더와 같다.
       const target = rule.day ?? anchor.getDate();
       if (d.getDate() !== target) return false;
       const months =
@@ -220,6 +223,25 @@ export function nextOccurrence(
   return null;
 }
 
+/** 이 발생일의 시작 시점(ms). 시각을 정하지 않았으면 null (종일). */
+export function instanceStartMs(rule: Recurrence, day: Date): number | null {
+  if (rule.timeMinutes == null) return null;
+  return startOfDay(day).getTime() + rule.timeMinutes * 60000;
+}
+
+/**
+ * 이 발생일이 "지난 것"이 되는 시점(ms).
+ *
+ * 시각은 참고용이라 지나도 그날 안에는 남고, 24시를 넘는 시각이면 실제
+ * 시점(다음날 새벽)까지 늘려 준다 — 토요일 26:00 은 일요일 02:01 까지.
+ */
+export function instanceEndMs(rule: Recurrence, day: Date): number {
+  return (
+    startOfDay(day).getTime() +
+    Math.max(DAY_MS, (rule.timeMinutes ?? 0) * 60000 + 60000)
+  );
+}
+
 /**
  * 지금 "오늘 것"으로 보여줄 발생일. 없으면 null.
  *
@@ -234,12 +256,51 @@ export function activeToday(
   for (const back of [0, 1]) {
     const day = addDays(now, -back);
     if (!withinWindow(rule, day) || !matchesDay(rule, createdAt, day)) continue;
-    const endMs =
-      day.getTime() +
-      Math.max(DAY_MS, (rule.timeMinutes ?? 0) * 60000 + 60000);
-    if (now.getTime() < endMs) return day;
+    // 인스턴스 목록과 같은 공식을 써야 한 화면 안에서 두 값이 갈라지지 않는다
+    if (now.getTime() < instanceEndMs(rule, day)) return day;
   }
   return null;
+}
+
+/**
+ * [from, to] 닫힌 구간(양 끝 포함) 안의 모든 발생일. 오름차순.
+ *
+ * 하루씩 훑으며 matchesDay 에게 물어본다 — 산술 점프로 다시 구현하면
+ * monthly 31일·weekly 주 정렬·yearly 윤년 판정이 matchesDay 와 갈라져
+ * "목록엔 있는데 행에는 오늘 강조가 없다" 같은 버그가 난다.
+ *
+ * now 를 읽지 않는다(순수). 테스트에서 임의 시점을 찍기 위해서다.
+ */
+export function expandRange(
+  rule: Recurrence,
+  createdAt: number,
+  from: Date,
+  to: Date,
+  maxPerRule = 400,
+): Date[] {
+  // 스캔 구간을 규칙의 창과 미리 교집합해 둔다. 루프 안에서 withinWindow 를
+  // 부르면 매 반복마다 parseDay 를 두 번 돌리게 되고, matchesDay 가 어차피
+  // 떨굴 anchor 이전 구간도 헛돈다.
+  const ruleFrom = parseDay(rule.from);
+  const ruleTo = parseDay(rule.to);
+  const anchor = anchorOf(rule, createdAt);
+
+  let scanStart = startOfDay(from);
+  if (scanStart.getTime() < anchor.getTime()) scanStart = anchor;
+  if (ruleFrom && scanStart.getTime() < ruleFrom.getTime()) scanStart = ruleFrom;
+
+  let scanEnd = startOfDay(to);
+  if (ruleTo && scanEnd.getTime() > ruleTo.getTime()) scanEnd = ruleTo;
+
+  if (scanEnd.getTime() < scanStart.getTime()) return [];
+
+  const out: Date[] = [];
+  const span = daysBetween(scanStart, scanEnd);
+  for (let i = 0; i <= span && out.length < maxPerRule; i++) {
+    const d = addDays(scanStart, i);
+    if (matchesDay(rule, createdAt, d)) out.push(d);
+  }
+  return out;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -281,11 +342,17 @@ export function describeWindow(rule: Recurrence): string {
   return "";
 }
 
-/** 다음 발생일을 짧게 — 오늘/내일/n일 뒤/날짜. */
+/** now 로부터 day 까지 며칠. 과거면 음수. */
+export function daysUntil(day: Date, now: Date): number {
+  return daysBetween(now, day);
+}
+
+/** 다음 발생일을 짧게 — 오늘/내일/모레/n일 뒤/날짜. */
 export function describeNext(day: Date, now: Date = new Date()): string {
   const diff = daysBetween(now, day);
   if (diff === 0) return "오늘";
   if (diff === 1) return "내일";
+  if (diff === 2) return "모레";
   if (diff < 0) return `${-diff}일 전`;
   if (diff <= 7) return `${WEEKDAY_LABELS[day.getDay()]} (${diff}일 뒤)`;
   return `${day.getMonth() + 1}/${day.getDate()}`;

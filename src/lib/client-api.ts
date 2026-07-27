@@ -53,7 +53,7 @@ export const api = {
     patch: {
       text?: string;
       title?: string;
-      url?: string;
+      url?: string | null;
       done?: boolean;
       dueAt?: number | null;
       recurrence?: unknown;

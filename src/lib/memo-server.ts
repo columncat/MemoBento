@@ -436,7 +436,8 @@ export function locateMemo(id: string): MemoLocation | null {
 export interface UpdateMemoInput {
   text?: string;
   title?: string;
-  url?: string;
+  /** 링크 URL. null 또는 빈 문자열이면 해제. */
+  url?: string | null;
   /** 체크리스트·TODO 완료 표시. */
   done?: boolean;
   /** TODO 기한 (unix ms). null 이면 해제. */
@@ -459,8 +460,9 @@ export function updateMemo(id: string, patch: UpdateMemoInput): void {
     if (patch.text !== undefined) set.text = patch.text;
     if (patch.title !== undefined) set.title = patch.title.trim() || null;
     if (patch.url !== undefined) {
-      set.url = patch.url.trim();
-      set.iconUrl = autoIconUrl(patch.url.trim());
+      const url = patch.url?.trim() || null;
+      set.url = url;
+      set.iconUrl = url ? autoIconUrl(url) : null;
     }
     if (patch.done !== undefined) set.done = patch.done ? 1 : 0;
     if (patch.dueAt !== undefined) {
@@ -490,11 +492,9 @@ export function updateMemo(id: string, patch: UpdateMemoInput): void {
         ? {
             ...p,
             title: patch.title !== undefined ? patch.title.trim() : p.title,
-            url: patch.url !== undefined ? patch.url.trim() || p.url : p.url,
-            iconUrl:
-              patch.url !== undefined && patch.url.trim()
-                ? autoIconUrl(patch.url.trim())
-                : p.iconUrl,
+            // Corkboard 핀은 URL 이 본체라 빈 값으로 지울 수 없다 — 기존 값 유지
+            url: patch.url?.trim() || p.url,
+            iconUrl: patch.url?.trim() ? autoIconUrl(patch.url.trim()) : p.iconUrl,
           }
         : p,
     );

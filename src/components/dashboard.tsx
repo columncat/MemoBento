@@ -39,6 +39,7 @@ import {
   type ColumnsPref,
 } from "@/lib/preferences";
 import {
+  autoIconUrl,
   looksLikeUrl,
   viewUrl,
   type MemoDTO,
@@ -245,6 +246,10 @@ export function Dashboard({
         },
       },
       schedule: {
+        onLink: (memo, url) => {
+          patchMemo(memo.id, { url, iconUrl: url ? autoIconUrl(url) : null });
+          void run(() => api.updateMemo(memo.id, { url })).catch(() => undefined);
+        },
         onRule: (memo, recurrence) => {
           patchMemo(memo.id, { recurrence });
           void run(() => api.updateMemo(memo.id, { recurrence })).catch(

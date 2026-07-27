@@ -2,6 +2,7 @@
 
 import {
   CalendarClock,
+  CalendarDays,
   Check,
   GripVertical,
   LayoutGrid,
@@ -34,6 +35,7 @@ import { cn } from "@/lib/utils";
 
 import type { ChecklistActions } from "./checklist-item";
 import { MemoList } from "./memo-list";
+import { SCHEDULE_VIEW_MODE } from "@/lib/schedule-instances";
 import type { ScheduleActions } from "./schedule-item";
 import type { MemoActions } from "./memo-item";
 
@@ -73,6 +75,62 @@ interface Props {
   flush?: boolean;
 }
 
+/**
+ * 보기 전환.
+ *
+ * 반복 일정 메모함은 같은 viewMode 를 "무엇을 보여줄지"로 읽는다 —
+ * 리스트 자리에 계산된 일정, 그리드 자리에 반복 규칙 목록. 저장 경로를
+ * 새로 만들지 않으려고 기존 필드를 재사용하되, 리터럴은 어댑터로만 다룬다.
+ * 체크리스트·TODO 는 늘 한 줄이라 전환할 것이 없다.
+ */
+function ViewToggle({
+  notebook,
+  onChange,
+}: {
+  notebook: NotebookDTO;
+  onChange: (mode: ViewMode) => void;
+}) {
+  if (notebook.kind === "checklist" || notebook.kind === "todo") return null;
+
+  const opts =
+    notebook.kind === "schedule"
+      ? [
+          {
+            mode: SCHEDULE_VIEW_MODE.instances,
+            Icon: CalendarDays,
+            label: "다가올 일정",
+          },
+          { mode: SCHEDULE_VIEW_MODE.rules, Icon: Repeat, label: "반복 규칙 목록" },
+        ]
+      : [
+          { mode: "list" as const, Icon: List, label: "리스트 보기" },
+          { mode: "grid" as const, Icon: LayoutGrid, label: "그리드 보기" },
+        ];
+
+  return (
+    <div className="mr-1 flex items-center rounded-md bg-(--color-bg-2) p-0.5 ring-1 ring-(--color-border-soft)">
+      {opts.map(({ mode, Icon, label }) => (
+        <button
+          key={mode}
+          type="button"
+          onClick={() => onChange(mode)}
+          aria-pressed={notebook.viewMode === mode}
+          aria-label={label}
+          title={label}
+          className={cn(
+            "grid h-5 w-6 place-items-center rounded transition",
+            notebook.viewMode === mode
+              ? "bg-(--color-accent-soft) text-(--color-accent-strong)"
+              : "text-(--color-fg-3) hover:text-(--color-fg-2)",
+          )}
+        >
+          <Icon className="h-3 w-3" />
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export function NotebookCard({
   notebook,
   memoActions,
@@ -84,6 +142,8 @@ export function NotebookCard({
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingName, setEditingName] = useState(false);
+  // 인스턴스에서 규칙으로 건너왔을 때 어느 규칙이었는지 잠깐 표시
+  const [highlightId, setHighlightId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState(notebook.name);
   const dragDepth = useRef(0);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -153,7 +213,9 @@ export function NotebookCard({
         if (p.notebookId === notebook.id) return; // 제자리
         if (!notebook.accepts.includes(p.type)) {
           handlers.notify(
-            `"${notebook.name}" 메모함은 ${canLink ? "링크" : "텍스트"} 메모만 받습니다`,
+            notebook.kind === "memo"
+              ? `"${notebook.name}" 메모함은 ${canLink ? "링크" : "텍스트"} 메모만 받습니다`
+              : `"${notebook.name}" 은 ${KIND_META[notebook.kind].label} 항목만 받습니다`,
           );
           return;
         }
@@ -335,37 +397,10 @@ export function NotebookCard({
             <Loader2 className="h-3.5 w-3.5 animate-spin text-(--color-accent)" />
           )}
 
-          {/* 리스트 / 그리드 — 체크리스트·TODO 는 항상 한 줄이라 감춘다 */}
-          <div
-            className={cn(
-              "mr-1 flex items-center rounded-md bg-(--color-bg-2) p-0.5 ring-1 ring-(--color-border-soft)",
-              isTask && "hidden",
-            )}
-          >
-            {(
-              [
-                { mode: "list" as const, Icon: List, label: "리스트 보기" },
-                { mode: "grid" as const, Icon: LayoutGrid, label: "그리드 보기" },
-              ]
-            ).map(({ mode, Icon, label }) => (
-              <button
-                key={mode}
-                type="button"
-                onClick={() => handlers.setViewMode(notebook.id, mode)}
-                aria-pressed={notebook.viewMode === mode}
-                aria-label={label}
-                title={label}
-                className={cn(
-                  "grid h-5 w-6 place-items-center rounded transition",
-                  notebook.viewMode === mode
-                    ? "bg-(--color-accent-soft) text-(--color-accent-strong)"
-                    : "text-(--color-fg-4) hover:text-(--color-fg-2)",
-                )}
-              >
-                <Icon className="h-3 w-3" />
-              </button>
-            ))}
-          </div>
+          <ViewToggle
+            notebook={notebook}
+            onChange={(mode) => handlers.setViewMode(notebook.id, mode)}
+          />
 
           {canFiles && (
             <button
@@ -463,6 +498,12 @@ export function NotebookCard({
           actions={memoActions}
           checklistActions={handlers.checklist}
           scheduleActions={handlers.schedule}
+          highlightId={highlightId}
+          onShowRule={(memo) => {
+            handlers.setViewMode(notebook.id, SCHEDULE_VIEW_MODE.rules);
+            setHighlightId(memo.id);
+            window.setTimeout(() => setHighlightId(null), 2000);
+          }}
           emptyHint={
             notebook.kind === "schedule"
               ? "반복할 일정을 입력하세요"

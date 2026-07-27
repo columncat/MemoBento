@@ -133,7 +133,10 @@ export function thumbUrl(
 export function memoLabel(memo: MemoDTO): string {
   if (memo.title && memo.title.trim()) return memo.title.trim();
   if (memo.file) return memo.file.name;
-  if (memo.url) return hostnameOf(memo.url);
+  // 링크 메모만 호스트명으로 대신한다. 일정·텍스트 메모에 링크를 붙였다고
+  // 표시 이름이 본문에서 호스트명으로 바뀌면 드래그 페이로드와 aria-label 까지
+  // 함께 어긋난다.
+  if (memo.type === "link" && memo.url) return hostnameOf(memo.url);
   return memo.text?.split("\n")[0]?.slice(0, 60) ?? "";
 }
 
