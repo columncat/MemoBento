@@ -13,7 +13,10 @@
   --color-fg:    oklch(0.96 0.005 80);
   --color-fg-2:  oklch(0.82 0.006 80);
   --color-fg-3:  oklch(0.62 0.006 80);
-  --color-fg-4:  oklch(0.46 0.006 80);
+  /* fg-4 는 가장 흐린 단계다. 0.46 일 때 카드 표면 위 대비가 2.46:1 이라
+     UI 요소 최소치(3:1)에도 못 미쳤다. fg-3 과 구별은 남기되 그 선은 넘긴다.
+     본문 기준선(4.5:1)에는 여전히 못 미치므로 읽어야 하는 글자에는 쓰지 않는다. */
+  --color-fg-4:  oklch(0.545 0.006 80);
 
   --color-accent:        oklch(0.78 0.14 145);
   --color-accent-soft:   oklch(0.78 0.14 145 / 0.18);
@@ -159,7 +162,7 @@
     --color-fg:    oklch(0.18 0.005 80);
     --color-fg-2:  oklch(0.32 0.006 80);
     --color-fg-3:  oklch(0.48 0.006 80);
-    --color-fg-4:  oklch(0.62 0.006 80);
+    --color-fg-4:  oklch(0.55 0.006 80);
     --color-accent:        oklch(0.55 0.18 145);
     --color-accent-soft:   oklch(0.55 0.18 145 / 0.12);
     --color-accent-strong: oklch(0.42 0.20 145);
@@ -178,7 +181,7 @@
     --color-fg:    oklch(0.18 0.005 240);
     --color-fg-2:  oklch(0.32 0.006 240);
     --color-fg-3:  oklch(0.48 0.006 240);
-    --color-fg-4:  oklch(0.62 0.006 240);
+    --color-fg-4:  oklch(0.55 0.006 240);
     --color-accent:        oklch(0.50 0.20 220);
     --color-accent-soft:   oklch(0.50 0.20 220 / 0.12);
     --color-accent-strong: oklch(0.38 0.22 220);
@@ -197,7 +200,7 @@
     --color-fg:    oklch(0.18 0.005 40);
     --color-fg-2:  oklch(0.32 0.006 40);
     --color-fg-3:  oklch(0.48 0.006 40);
-    --color-fg-4:  oklch(0.62 0.006 40);
+    --color-fg-4:  oklch(0.55 0.006 40);
     --color-accent:        oklch(0.58 0.20 50);
     --color-accent-soft:   oklch(0.58 0.20 50 / 0.14);
     --color-accent-strong: oklch(0.46 0.22 50);
@@ -216,7 +219,7 @@
     --color-fg:    oklch(0.18 0.005 295);
     --color-fg-2:  oklch(0.32 0.006 295);
     --color-fg-3:  oklch(0.48 0.006 295);
-    --color-fg-4:  oklch(0.62 0.006 295);
+    --color-fg-4:  oklch(0.55 0.006 295);
     --color-accent:        oklch(0.50 0.18 295);
     --color-accent-soft:   oklch(0.50 0.18 295 / 0.12);
     --color-accent-strong: oklch(0.40 0.20 295);
@@ -235,7 +238,7 @@
     --color-fg:    oklch(0.18 0.003 250);
     --color-fg-2:  oklch(0.30 0.003 250);
     --color-fg-3:  oklch(0.46 0.003 250);
-    --color-fg-4:  oklch(0.60 0.003 250);
+    --color-fg-4:  oklch(0.54 0.003 250);
     --color-accent:        oklch(0.28 0.005 250);
     --color-accent-soft:   oklch(0.28 0.005 250 / 0.10);
     --color-accent-strong: oklch(0.18 0.003 250);
@@ -254,7 +257,7 @@
     --color-fg:    oklch(0.18 0.005 15);
     --color-fg-2:  oklch(0.32 0.006 15);
     --color-fg-3:  oklch(0.48 0.006 15);
-    --color-fg-4:  oklch(0.62 0.006 15);
+    --color-fg-4:  oklch(0.55 0.006 15);
     --color-accent:        oklch(0.55 0.20 15);
     --color-accent-soft:   oklch(0.55 0.20 15 / 0.12);
     --color-accent-strong: oklch(0.42 0.22 15);
