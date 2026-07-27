@@ -246,23 +246,21 @@ export function Dashboard({
         },
       },
       schedule: {
-        onColor: (memo, color) => {
-          patchMemo(memo.id, { color });
-          void run(() => api.updateMemo(memo.id, { color })).catch(() => undefined);
-        },
-        onLink: (memo, url) => {
-          patchMemo(memo.id, { url, iconUrl: url ? autoIconUrl(url) : null });
-          void run(() => api.updateMemo(memo.id, { url })).catch(() => undefined);
-        },
-        onRule: (memo, recurrence) => {
-          patchMemo(memo.id, { recurrence });
-          void run(() => api.updateMemo(memo.id, { recurrence })).catch(
-            () => undefined,
-          );
-        },
-        onRename: (memo, text) => {
-          patchMemo(memo.id, { text });
-          void run(() => api.updateMemo(memo.id, { text })).catch(() => undefined);
+        /**
+         * 편집기가 하나로 합쳐졌으므로 저장도 한 번이다. 필드마다 따로
+         * 보내면 요청이 경쟁하고, 하나만 실패했을 때 화면과 서버가 어긋난다.
+         */
+        onSave: (memo, patch) => {
+          const local: Partial<MemoDTO> = {};
+          if (patch.text !== undefined) local.text = patch.text;
+          if (patch.color !== undefined) local.color = patch.color;
+          if (patch.recurrence !== undefined) local.recurrence = patch.recurrence;
+          if (patch.url !== undefined) {
+            local.url = patch.url;
+            local.iconUrl = patch.url ? autoIconUrl(patch.url) : null;
+          }
+          patchMemo(memo.id, local);
+          void run(() => api.updateMemo(memo.id, patch)).catch(() => undefined);
         },
       },
       notify: (message) => fail(new Error(message)),

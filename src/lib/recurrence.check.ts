@@ -10,6 +10,7 @@ import assert from "node:assert/strict";
 
 import {
   activeToday,
+  describeNext,
   expandRange,
   instanceEndMs,
   instanceStartMs,
@@ -239,6 +240,17 @@ check("T-24 윤년 2/29 규칙에 다음 발생이 나온다", () => {
   const every4 = rule({ freq: "yearly", interval: 4, month: 2, day: 29 });
   const n4 = nextOccurrence(every4, D("2024-02-29").getTime(), D("2026-07-28"));
   assert.equal(n4 && toDayString(n4), "2028-02-29");
+});
+
+check("T-26 다음 발생 표기에 '며칠 뒤'를 붙이지 않는다", () => {
+  // 옆에 실제 날짜가 함께 나오므로 중복이고, 좁은 칸에서 요일을 밀어낸다
+  const now = D("2026-07-28");
+  assert.equal(describeNext(D("2026-07-28"), now), "오늘");
+  assert.equal(describeNext(D("2026-07-29"), now), "내일");
+  assert.equal(describeNext(D("2026-07-30"), now), "모레");
+  assert.equal(describeNext(D("2026-07-31"), now), "금요일");
+  assert.equal(describeNext(D("2026-08-03"), now), "월요일");
+  assert.equal(describeNext(D("2026-09-12"), now), "9/12");
 });
 
 check("T-25 서머타임 전환일에도 시각이 벽시계 그대로다", () => {

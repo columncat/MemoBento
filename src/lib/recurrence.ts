@@ -407,13 +407,18 @@ export function daysUntil(day: Date, now: Date): number {
   return daysBetween(now, day);
 }
 
-/** 다음 발생일을 짧게 — 오늘/내일/모레/n일 뒤/날짜. */
+/**
+ * 다음 발생일을 짧게 — 오늘/내일/모레/요일/날짜.
+ *
+ * "며칠 뒤"는 붙이지 않는다. 옆에 실제 날짜가 같이 나오므로 중복이고,
+ * 좁은 칸에서 요일까지 밀어내 버린다.
+ */
 export function describeNext(day: Date, now: Date = new Date()): string {
   const diff = daysBetween(now, day);
   if (diff === 0) return "오늘";
   if (diff === 1) return "내일";
   if (diff === 2) return "모레";
   if (diff < 0) return `${-diff}일 전`;
-  if (diff <= 7) return `${WEEKDAY_LABELS[day.getDay()]} (${diff}일 뒤)`;
+  if (diff <= 7) return `${WEEKDAY_LABELS[day.getDay()]}요일`;
   return `${day.getMonth() + 1}/${day.getDate()}`;
 }

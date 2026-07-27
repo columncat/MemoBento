@@ -144,7 +144,7 @@ function ScheduleSection({
       );
     }
     return (
-      <ul className="flex flex-col">
+      <ul className="flex flex-col gap-1">
         {memos.map((m) => (
           <ScheduleItem
             key={m.id}
@@ -233,7 +233,7 @@ function InstanceView({
           <SectionHead>
             주기 없음 · {ruleless.length} — 주기를 정하면 아래 일정에 나타납니다
           </SectionHead>
-          <ul className="flex flex-col">
+          <ul className="flex flex-col gap-1">
             {ruleless.map((m) => (
               <ScheduleItem
                 key={m.id}
@@ -303,7 +303,7 @@ function InstanceView({
             예정 없음 · {dormant.length}
           </button>
           {showDormant && (
-            <ul id="schedule-dormant" className="flex flex-col">
+            <ul id="schedule-dormant" className="flex flex-col gap-1">
               {dormant.map((m) => (
                 <ScheduleItem
                   key={m.id}
