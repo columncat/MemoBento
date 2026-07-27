@@ -20,7 +20,7 @@ import {
   toDayString,
   type Recurrence,
 } from "./recurrence";
-import type { MemoDTO, ViewMode } from "./types";
+import type { MemoDTO } from "./types";
 
 /** 지금 이 발생이 어느 상태인가. */
 export type InstanceState = "live" | "upcoming" | "past";
@@ -248,23 +248,3 @@ export function groupByDay(
   }
   return groups;
 }
-
-// ─────────────────────────────────────────────────────────────
-//   뷰 어댑터
-// ─────────────────────────────────────────────────────────────
-
-/**
- * 반복 일정 메모함에서 viewMode 는 "무엇을 보여줄지"로 달리 읽는다.
- * 일정 관련 코드에서는 "list"/"grid" 리터럴을 직접 쓰지 않는다 — 나중에
- * 진짜 그리드 보기가 필요해지면 이 어댑터 한 곳만 고치면 된다.
- */
-export type ScheduleView = "instances" | "rules";
-
-export function scheduleViewOf(mode: ViewMode): ScheduleView {
-  return mode === "grid" ? "rules" : "instances";
-}
-
-export const SCHEDULE_VIEW_MODE: Record<ScheduleView, ViewMode> = {
-  instances: "list",
-  rules: "grid",
-};

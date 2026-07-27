@@ -2,7 +2,6 @@
 
 import {
   CalendarClock,
-  CalendarDays,
   Check,
   GripVertical,
   LayoutGrid,
@@ -16,6 +15,7 @@ import {
   Pencil,
   Plus,
   Repeat,
+  Table2,
   Trash2,
   Upload,
 } from "lucide-react";
@@ -35,7 +35,6 @@ import { cn } from "@/lib/utils";
 
 import type { ChecklistActions } from "./checklist-item";
 import { MemoList } from "./memo-list";
-import { SCHEDULE_VIEW_MODE } from "@/lib/schedule-instances";
 import type { ScheduleActions } from "./schedule-item";
 import type { MemoActions } from "./memo-item";
 
@@ -57,6 +56,8 @@ export interface NotebookHandlers {
   checklist: ChecklistActions;
   /** 반복 일정 항목 조작. */
   schedule: ScheduleActions;
+  /** 반복 규칙 편집 표 열기. */
+  editRules: (notebook: NotebookDTO, focusMemoId?: string) => void;
   /** 사용자에게 알릴 메시지 (받을 수 없는 항목을 떨어뜨린 경우 등). */
   notify: (message: string) => void;
   setViewMode: (notebookId: string, mode: ViewMode) => void;
@@ -76,12 +77,8 @@ interface Props {
 }
 
 /**
- * 보기 전환.
- *
- * 반복 일정 메모함은 같은 viewMode 를 "무엇을 보여줄지"로 읽는다 —
- * 리스트 자리에 계산된 일정, 그리드 자리에 반복 규칙 목록. 저장 경로를
- * 새로 만들지 않으려고 기존 필드를 재사용하되, 리터럴은 어댑터로만 다룬다.
- * 체크리스트·TODO 는 늘 한 줄이라 전환할 것이 없다.
+ * 보기 전환. 일반 메모함에만 있다 —
+ * 체크리스트·TODO·반복 일정은 보기가 하나뿐이다.
  */
 function ViewToggle({
   notebook,
@@ -90,22 +87,13 @@ function ViewToggle({
   notebook: NotebookDTO;
   onChange: (mode: ViewMode) => void;
 }) {
-  if (notebook.kind === "checklist" || notebook.kind === "todo") return null;
+  // 반복 일정은 보기가 하나뿐이다 — 규칙 편집은 별도의 넓은 표로 나갔다
+  if (notebook.kind !== "memo") return null;
 
-  const opts =
-    notebook.kind === "schedule"
-      ? [
-          {
-            mode: SCHEDULE_VIEW_MODE.instances,
-            Icon: CalendarDays,
-            label: "다가올 일정",
-          },
-          { mode: SCHEDULE_VIEW_MODE.rules, Icon: Repeat, label: "반복 규칙 목록" },
-        ]
-      : [
-          { mode: "list" as const, Icon: List, label: "리스트 보기" },
-          { mode: "grid" as const, Icon: LayoutGrid, label: "그리드 보기" },
-        ];
+  const opts = [
+    { mode: "list" as const, Icon: List, label: "리스트 보기" },
+    { mode: "grid" as const, Icon: LayoutGrid, label: "그리드 보기" },
+  ];
 
   return (
     <div
@@ -148,15 +136,7 @@ export function NotebookCard({
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingName, setEditingName] = useState(false);
-  // 인스턴스에서 규칙으로 건너왔을 때 어느 규칙이었는지 잠깐 표시
-  const [highlightId, setHighlightId] = useState<string | null>(null);
-  const highlightTimer = useRef<number | null>(null);
-  useEffect(
-    () => () => {
-      if (highlightTimer.current) window.clearTimeout(highlightTimer.current);
-    },
-    [],
-  );
+
   const [draftName, setDraftName] = useState(notebook.name);
   const dragDepth = useRef(0);
   const fileRef = useRef<HTMLInputElement | null>(null);
@@ -415,6 +395,18 @@ export function NotebookCard({
             onChange={(mode) => handlers.setViewMode(notebook.id, mode)}
           />
 
+          {notebook.kind === "schedule" && (
+            <button
+              type="button"
+              onClick={() => handlers.editRules(notebook)}
+              className={iconBtn}
+              aria-label="반복 규칙 편집"
+              title="반복 규칙 편집 — 표로 펼쳐서"
+            >
+              <Table2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+
           {canFiles && (
             <button
               type="button"
@@ -511,19 +503,7 @@ export function NotebookCard({
           actions={memoActions}
           checklistActions={handlers.checklist}
           scheduleActions={handlers.schedule}
-          highlightId={highlightId}
-          onShowRule={(memo) => {
-            handlers.setViewMode(notebook.id, SCHEDULE_VIEW_MODE.rules);
-            setHighlightId(memo.id);
-            // 연달아 누르면 앞선 타이머가 뒤 강조를 지운다
-            if (highlightTimer.current) {
-              window.clearTimeout(highlightTimer.current);
-            }
-            highlightTimer.current = window.setTimeout(
-              () => setHighlightId(null),
-              2000,
-            );
-          }}
+          onShowRule={(memo) => handlers.editRules(notebook, memo.id)}
           emptyHint={
             notebook.kind === "schedule"
               ? "반복할 일정을 입력하세요"

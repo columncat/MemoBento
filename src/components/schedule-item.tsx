@@ -56,26 +56,6 @@ export interface ScheduleActions {
  */
 export type ScheduleVariant = "rule" | "instance";
 
-const DEFAULT_RULE: Recurrence = { freq: "weekly", interval: 1, weekdays: [1] };
-
-const FREQ_LABELS: { value: Freq; label: string; unit: string }[] = [
-  { value: "daily", label: "일", unit: "일" },
-  { value: "weekly", label: "주", unit: "주" },
-  { value: "monthly", label: "월", unit: "개월" },
-  { value: "yearly", label: "년", unit: "년" },
-];
-
-const COLOR_LABELS: Record<MemoColor, string> = {
-  red: "빨강",
-  orange: "주황",
-  amber: "노랑",
-  green: "초록",
-  teal: "청록",
-  blue: "파랑",
-  violet: "보라",
-  pink: "분홍",
-};
-
 /**
  * 링크는 렌더 시점에 스킴을 한 번 더 막는다.
  *
@@ -98,20 +78,17 @@ function safeHref(url: string | null): string | null {
  */
 export function ScheduleRow({
   memo,
-  actions,
   memoActions,
   variant = "rule",
   now,
   day,
   dayLabel,
   state,
-  highlight = false,
   dnd,
   handleProps,
   onShowRule,
 }: {
   memo: MemoDTO;
-  actions: ScheduleActions;
   memoActions: MemoActions;
   variant?: ScheduleVariant;
   /** 목록에서 한 번만 계산해 내려주는 "지금". null 이면 시간 의존 표시를 그리지 않는다. */
@@ -122,8 +99,6 @@ export function ScheduleRow({
   dayLabel?: string;
   /** variant="instance" 일 때 이 발생의 상태. */
   state?: InstanceState;
-  /** 인스턴스에서 규칙으로 건너왔을 때 잠깐 표시. */
-  highlight?: boolean;
   /** 순서 변경용 DnD props (memo-item 과 동일 규약). 인스턴스 뷰에서는 없다. */
   dnd?: Record<string, unknown>;
   /** 끌기를 시작하는 손잡이 props. 인스턴스 뷰에서는 없다. */
@@ -131,8 +106,6 @@ export function ScheduleRow({
   /** 인스턴스에서 규칙 목록으로 이동. */
   onShowRule?: (memo: MemoDTO) => void;
 }) {
-  const [editorOpen, setEditorOpen] = useState(false);
-
   const rule = memo.recurrence;
   const isRuleView = variant === "rule";
 
@@ -179,8 +152,6 @@ export function ScheduleRow({
         isNow && "border-(--color-accent)",
         // 알파를 쓰면 밝은 배경에서 사실상 사라진다. 점선으로 위계를 만든다.
         soon && !today && "border-dotted border-(--color-accent)",
-        editorOpen && "z-40",
-        highlight && "ring-1 ring-(--color-accent)",
       )}
     >
       {handleProps && (
@@ -297,17 +268,18 @@ export function ScheduleRow({
         </span>
       </span>
 
-      {/* 수정은 하나로 합쳤다 — 내용·링크·색·주기가 한 판에 있다 */}
-      {isRuleView && (
+      {/* 편집은 넓은 표에서 한다 — 규칙 하나에 값이 열 개 가까이라 행 위
+          팝오버로는 어느 것도 제대로 보이지 않았다 */}
+      {isRuleView && onShowRule && (
         <button
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            setEditorOpen((v) => !v);
+            onShowRule(memo);
           }}
           className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-(--color-fg-3) transition hover:bg-(--color-bg-2) hover:text-(--color-fg)"
           aria-label="수정"
-          title="수정 — 내용·링크·색·주기"
+          title="반복 규칙 편집 표 열기"
         >
           <SlidersHorizontal className="h-4 w-4" />
         </button>
@@ -328,420 +300,7 @@ export function ScheduleRow({
         </button>
       )}
 
-      {editorOpen && (
-        <ItemEditor
-          memo={memo}
-          onCancel={() => setEditorOpen(false)}
-          onSave={(patch) => {
-            actions.onSave(memo, patch);
-            setEditorOpen(false);
-          }}
-        />
-      )}
     </li>
-  );
-}
-
-/** 행 위에 뜨는 판. */
-function Popover({
-  onCancel,
-  className,
-  children,
-}: {
-  onCancel: () => void;
-  className?: string;
-  children: React.ReactNode;
-}) {
-  const boxRef = useRef<HTMLDivElement | null>(null);
-
-  // 바깥을 누르면 닫는다
-  useEffect(() => {
-    const onDown = (e: MouseEvent) => {
-      if (!boxRef.current?.contains(e.target as Node)) onCancel();
-    };
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [onCancel]);
-
-  return (
-    <div
-      ref={boxRef}
-      onClick={(e) => e.stopPropagation()}
-      onMouseDown={(e) => e.stopPropagation()}
-      className={cn(
-        "absolute top-full right-0 z-30 mt-1 max-h-[70vh] overflow-y-auto rounded-xl border border-(--color-border) bg-(--color-surface) p-3 shadow-xl",
-        className,
-      )}
-    >
-      {children}
-    </div>
-  );
-}
-
-function FieldLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="mb-1 text-[12px] font-medium text-(--color-fg-2)">
-      {children}
-    </div>
-  );
-}
-
-const inputClass =
-  "w-full rounded bg-(--color-bg-2) px-2 py-1.5 text-[13px] text-(--color-fg) ring-1 ring-(--color-border-soft) outline-none focus:ring-(--color-accent)";
-
-/**
- * 항목 편집기 — 내용·링크·색·주기가 한 판에 있다.
- *
- * 예전에는 셋이 각각 버튼과 팝오버를 가졌는데, 좁은 카드에서 아이콘 세 개가
- * 제목 자리를 먹었고 어느 버튼이 무엇인지도 알기 어려웠다.
- */
-function ItemEditor({
-  memo,
-  onSave,
-  onCancel,
-}: {
-  memo: MemoDTO;
-  onSave: (patch: SchedulePatch) => void;
-  onCancel: () => void;
-}) {
-  const value = memo.recurrence ?? DEFAULT_RULE;
-  const hasRule = !!memo.recurrence;
-  // 기준일은 명시된 anchor, 없으면 만든 날. 표시 기간(from)은 관여하지 않는다.
-  const anchorDay = parseDay(value.anchor) ?? new Date(memo.createdAt);
-
-  const [text, setText] = useState(memo.text ?? "");
-  const [url, setUrl] = useState(memo.url ?? "");
-  const [color, setColor] = useState<MemoColor | null>(memo.color);
-  const [enabled, setEnabled] = useState(hasRule);
-  const [freq, setFreq] = useState<Freq>(value.freq);
-  const [interval, setInterval] = useState(String(value.interval));
-  // 요일을 고르지 않은 규칙은 기준일의 요일로 돈다. 비워 두면 화면에 아무
-  // 단서가 없어 왜 그 요일인지 알 수 없으므로 미리 눌러 보여 준다.
-  const [weekdays, setWeekdays] = useState<number[]>(
-    value.weekdays ?? (value.freq === "weekly" ? [anchorDay.getDay()] : []),
-  );
-  const [day, setDay] = useState(value.day ? String(value.day) : "");
-  const [month, setMonth] = useState(value.month ? String(value.month) : "");
-  const [time, setTime] = useState(
-    value.timeMinutes != null ? formatTime(value.timeMinutes) : "",
-  );
-  const [from, setFrom] = useState(value.from ?? "");
-  const [to, setTo] = useState(value.to ?? "");
-  const [error, setError] = useState<string | null>(null);
-
-  const unit = FREQ_LABELS.find((f) => f.value === freq)?.unit ?? "";
-
-  const save = () => {
-    const body = text.trim();
-    if (!body) {
-      setError("내용을 비울 수 없습니다");
-      return;
-    }
-
-    const raw = url.trim();
-    let nextUrl: string | null = null;
-    if (raw) {
-      // 서버도 검증하지만 여기서 먼저 막는다 — 낙관적 반영이 검증 전 원본
-      // 문자열을 그대로 화면에 올리기 때문이다.
-      nextUrl = normalizeUrl(raw);
-      if (!nextUrl) {
-        setError("올바른 주소가 아닙니다");
-        return;
-      }
-    }
-
-    let recurrence: Recurrence | null = null;
-    if (enabled) {
-      const t = time.trim();
-      // 시각은 26:59 까지 — 하루의 끝을 넘겨 쓰는 생활 표기를 그대로 받는다
-      const timeMinutes = t ? parseTimeInput(t) : null;
-      if (t && timeMinutes == null) {
-        setError("시각은 00:00 ~ 26:59 형식으로");
-        return;
-      }
-      recurrence = {
-        // 기준일은 사용자가 건드리지 않는다. 여기서 흘리면 다음 저장 때
-        // 만든 날로 되돌아가면서 발생 요일이 바뀐다.
-        anchor: value.anchor ?? null,
-        freq,
-        interval: Math.max(1, Number(interval) || 1),
-        weekdays:
-          freq === "weekly" && weekdays.length ? [...weekdays].sort() : undefined,
-        day:
-          (freq === "monthly" || freq === "yearly") && day ? Number(day) : undefined,
-        month: freq === "yearly" && month ? Number(month) : undefined,
-        timeMinutes,
-        from: from || null,
-        to: to || null,
-      };
-    }
-
-    onSave({ text: body, url: nextUrl, color, recurrence });
-  };
-
-  return (
-    <Popover onCancel={onCancel} className="w-72">
-      <div className="flex flex-col gap-3 text-[12px] text-(--color-fg-2)">
-        <div>
-          <FieldLabel>내용</FieldLabel>
-          <textarea
-            autoFocus
-            rows={2}
-            value={text}
-            onChange={(e) => {
-              setText(e.target.value);
-              setError(null);
-            }}
-            onKeyDown={(e) => {
-              e.stopPropagation();
-              if (e.key === "Escape") onCancel();
-            }}
-            className={cn(inputClass, "resize-none")}
-            aria-label="내용"
-          />
-        </div>
-
-        <div>
-          <FieldLabel>
-            링크 <span className="font-normal text-(--color-fg-3)">선택</span>
-          </FieldLabel>
-          <input
-            value={url}
-            onChange={(e) => {
-              setUrl(e.target.value);
-              setError(null);
-            }}
-            onKeyDown={(e) => e.stopPropagation()}
-            placeholder="https://example.com"
-            className={inputClass}
-            aria-label="링크 주소"
-          />
-        </div>
-
-        <div>
-          <FieldLabel>글자 색</FieldLabel>
-          <div className="grid grid-cols-5 gap-1.5">
-            {MEMO_COLORS.map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setColor(c)}
-                aria-pressed={color === c}
-                aria-label={COLOR_LABELS[c]}
-                title={COLOR_LABELS[c]}
-                className={cn(
-                  "grid h-8 place-items-center rounded-lg text-[15px] font-semibold transition",
-                  color === c
-                    ? "bg-(--color-surface-hi) ring-2 ring-(--color-accent)"
-                    : "bg-(--color-bg-2) hover:bg-(--color-surface-hi)",
-                )}
-                style={{ color: `var(--color-tag-${c})` }}
-              >
-                가
-              </button>
-            ))}
-            <button
-              type="button"
-              onClick={() => setColor(null)}
-              aria-pressed={color === null}
-              aria-label="기본색"
-              title="기본색"
-              className={cn(
-                "col-span-2 grid h-8 place-items-center rounded-lg text-[12px] transition",
-                color === null
-                  ? "bg-(--color-surface-hi) text-(--color-fg-2) ring-2 ring-(--color-accent)"
-                  : "bg-(--color-bg-2) text-(--color-fg-3) hover:bg-(--color-surface-hi)",
-              )}
-            >
-              기본색
-            </button>
-          </div>
-        </div>
-
-        <div className="border-t border-(--color-border-soft) pt-2.5">
-          <label className="mb-2 flex cursor-pointer items-center gap-2">
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
-              className="h-3.5 w-3.5 accent-(--color-accent)"
-            />
-            <span className="text-[12px] font-medium text-(--color-fg-2)">
-              반복
-            </span>
-            <span className="text-[12px] text-(--color-fg-3)">
-              {enabled ? "" : "끄면 목록에 뜨지 않습니다"}
-            </span>
-          </label>
-
-          {enabled && (
-            <div className="flex flex-col gap-2.5">
-              <div className="flex items-center gap-1.5">
-                <input
-                  type="number"
-                  min={1}
-                  max={freq === "yearly" ? 20 : 999}
-                  value={interval}
-                  onChange={(e) => setInterval(e.target.value)}
-                  className="w-12 rounded bg-(--color-bg-2) px-1.5 py-1 text-center text-(--color-fg) ring-1 ring-(--color-border-soft) outline-none focus:ring-(--color-accent)"
-                  aria-label="간격"
-                />
-                <span className="text-(--color-fg-3)">{unit}마다</span>
-                <div className="ml-auto flex gap-0.5">
-                  {FREQ_LABELS.map((f) => (
-                    <button
-                      key={f.value}
-                      type="button"
-                      onClick={() => setFreq(f.value)}
-                      aria-pressed={freq === f.value}
-                      aria-label={`${f.unit} 단위`}
-                      className={cn(
-                        "h-7 w-7 rounded transition",
-                        freq === f.value
-                          ? "bg-(--color-accent) font-medium text-(--color-bg)"
-                          : "bg-(--color-bg-2) hover:bg-(--color-surface-hi)",
-                      )}
-                    >
-                      {f.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {freq === "weekly" && (
-                <div className="flex gap-0.5">
-                  {WEEKDAY_LABELS.map((label, i) => (
-                    <button
-                      key={label}
-                      type="button"
-                      onClick={() =>
-                        setWeekdays((prev) =>
-                          prev.includes(i)
-                            ? prev.filter((w) => w !== i)
-                            : [...prev, i],
-                        )
-                      }
-                      aria-pressed={weekdays.includes(i)}
-                      aria-label={`${label}요일`}
-                      className={cn(
-                        "h-7 flex-1 rounded text-[12px] transition",
-                        weekdays.includes(i)
-                          ? "bg-(--color-accent) font-medium text-(--color-bg)"
-                          : "bg-(--color-bg-2) hover:bg-(--color-surface-hi)",
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              )}
-
-              {(freq === "monthly" || freq === "yearly") && (
-                <div className="flex flex-col gap-1">
-                  <div className="flex items-center gap-1.5">
-                    {freq === "yearly" && (
-                      <>
-                        <input
-                          type="number"
-                          min={1}
-                          max={12}
-                          value={month}
-                          onChange={(e) => setMonth(e.target.value)}
-                          placeholder="월"
-                          className="w-12 rounded bg-(--color-bg-2) px-1.5 py-1 text-center text-(--color-fg) ring-1 ring-(--color-border-soft) outline-none focus:ring-(--color-accent)"
-                          aria-label="월"
-                        />
-                        <span className="text-(--color-fg-3)">월</span>
-                      </>
-                    )}
-                    <input
-                      type="number"
-                      min={1}
-                      max={31}
-                      value={day}
-                      onChange={(e) => setDay(e.target.value)}
-                      placeholder="일"
-                      className="w-12 rounded bg-(--color-bg-2) px-1.5 py-1 text-center text-(--color-fg) ring-1 ring-(--color-border-soft) outline-none focus:ring-(--color-accent)"
-                      aria-label="일"
-                    />
-                    <span className="text-(--color-fg-3)">일</span>
-                  </div>
-                  {Number(day) >= 29 && (
-                    <p className="text-[12px] text-(--color-fg-3)">
-                      29·30·31일은 그 날짜가 없는 달을 건너뜁니다
-                    </p>
-                  )}
-                </div>
-              )}
-
-              <div>
-                <FieldLabel>
-                  시각{" "}
-                  <span className="font-normal text-(--color-fg-3)">
-                    참고용 · 선택
-                  </span>
-                </FieldLabel>
-                <input
-                  value={time}
-                  onChange={(e) => {
-                    setTime(e.target.value);
-                    setError(null);
-                  }}
-                  onKeyDown={(e) => e.stopPropagation()}
-                  placeholder="예: 26:00 (다음날 새벽 2시)"
-                  inputMode="numeric"
-                  className={cn(inputClass, "font-mono")}
-                  aria-label="시각"
-                />
-              </div>
-
-              <div>
-                <FieldLabel>
-                  표시 기간{" "}
-                  <span className="font-normal text-(--color-fg-3)">선택</span>
-                </FieldLabel>
-                <div className="flex items-center gap-1">
-                  <input
-                    type="date"
-                    value={from}
-                    onChange={(e) => setFrom(e.target.value)}
-                    className="min-w-0 flex-1 rounded bg-(--color-bg-2) px-1.5 py-1 text-(--color-fg) ring-1 ring-(--color-border-soft) outline-none focus:ring-(--color-accent)"
-                    aria-label="표시 시작일"
-                  />
-                  <span className="text-(--color-fg-3)">~</span>
-                  <input
-                    type="date"
-                    value={to}
-                    onChange={(e) => setTo(e.target.value)}
-                    className="min-w-0 flex-1 rounded bg-(--color-bg-2) px-1.5 py-1 text-(--color-fg) ring-1 ring-(--color-border-soft) outline-none focus:ring-(--color-accent)"
-                    aria-label="표시 종료일"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {error && <div className="text-(--color-danger)">{error}</div>}
-
-        <div className="flex items-center gap-1.5">
-          <button
-            type="button"
-            onClick={save}
-            className="flex-1 rounded-lg bg-(--color-accent) py-2 font-medium text-(--color-bg) transition hover:bg-(--color-accent-strong)"
-          >
-            저장
-          </button>
-          <button
-            type="button"
-            onClick={onCancel}
-            className="rounded-lg px-3 py-2 text-(--color-fg-3) transition hover:bg-(--color-surface-hi) hover:text-(--color-fg-2)"
-          >
-            취소
-          </button>
-        </div>
-      </div>
-    </Popover>
   );
 }
 

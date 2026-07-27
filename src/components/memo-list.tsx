@@ -10,7 +10,6 @@ import {
   dropPast,
   expandMemos,
   instanceState,
-  scheduleViewOf,
   type ScheduleInstance,
 } from "@/lib/schedule-instances";
 import type { MemoDTO, NotebookKind, ViewMode } from "@/lib/types";
@@ -31,7 +30,6 @@ export function MemoList({
   checklistActions,
   scheduleActions,
   emptyHint,
-  highlightId,
   onShowRule,
 }: {
   memos: MemoDTO[];
@@ -41,9 +39,7 @@ export function MemoList({
   checklistActions: ChecklistActions;
   scheduleActions: ScheduleActions;
   emptyHint?: string;
-  /** 규칙 뷰로 건너온 직후 잠깐 강조할 메모. */
-  highlightId?: string | null;
-  /** 인스턴스에서 규칙 목록으로 이동. */
+  /** 인스턴스에서 규칙 편집 표로 이동. */
   onShowRule?: (memo: MemoDTO) => void;
 }) {
   // 반복 일정은 비어 있어도 자체 안내가 필요하다 (규칙은 있는데 발생이 없는
@@ -52,10 +48,8 @@ export function MemoList({
     return (
       <ScheduleSection
         memos={memos}
-        viewMode={viewMode}
         actions={scheduleActions}
         memoActions={actions}
-        highlightId={highlightId}
         onShowRule={onShowRule}
       />
     );
@@ -117,48 +111,20 @@ export function MemoList({
  */
 function ScheduleSection({
   memos,
-  viewMode,
   actions,
   memoActions,
-  highlightId,
   onShowRule,
 }: {
   memos: MemoDTO[];
-  viewMode: ViewMode;
   actions: ScheduleActions;
   memoActions: MemoActions;
-  highlightId?: string | null;
   onShowRule?: (memo: MemoDTO) => void;
 }) {
   // 목록에서 한 번만 계산해 모든 행에 내려준다
   const now = useNow(60_000);
-  const view = scheduleViewOf(viewMode);
 
-  if (view === "rules") {
-    if (memos.length === 0) {
-      return (
-        <div className="rounded-lg border border-dashed border-(--color-border) px-4 py-8 text-center text-sm break-keep text-(--color-fg-3)">
-          <Repeat className="mx-auto mb-1.5 h-4 w-4" />
-          반복할 일정을 입력하세요
-        </div>
-      );
-    }
-    return (
-      <ul className="flex flex-col gap-1">
-        {memos.map((m) => (
-          <ScheduleItem
-            key={m.id}
-            memo={m}
-            actions={actions}
-            memoActions={memoActions}
-            now={now}
-            highlight={highlightId === m.id}
-          />
-        ))}
-      </ul>
-    );
-  }
-
+  // 카드에는 계산된 일정만 둔다. 규칙 편집은 값이 열 개 가까이 되어 좁은
+  // 카드 한 칸에 넣을 수 없으므로 넓은 표(ScheduleGridModal)로 뺐다.
   return (
     <InstanceView
       memos={memos}
@@ -238,9 +204,9 @@ function InstanceView({
               <ScheduleItem
                 key={m.id}
                 memo={m}
-                actions={actions}
                 memoActions={memoActions}
                 now={now}
+                onShowRule={onShowRule}
               />
             ))}
           </ul>
@@ -308,9 +274,9 @@ function InstanceView({
                 <ScheduleItem
                   key={m.id}
                   memo={m}
-                  actions={actions}
                   memoActions={memoActions}
                   now={now}
+                  onShowRule={onShowRule}
                 />
               ))}
             </ul>
@@ -352,7 +318,6 @@ function InstanceRow({
   return (
     <ScheduleRow
       memo={inst.memo}
-      actions={actions}
       memoActions={memoActions}
       variant="instance"
       now={now}
@@ -398,26 +363,23 @@ function ChecklistItem({
 /** ScheduleRow 용 래퍼 — 규칙 뷰 전용 (인스턴스는 드래그하지 않는다). */
 function ScheduleItem({
   memo,
-  actions,
   memoActions,
   now,
-  highlight,
+  onShowRule,
 }: {
   memo: MemoDTO;
-  actions: ScheduleActions;
   memoActions: MemoActions;
   now: Date | null;
-  highlight?: boolean;
+  onShowRule?: (memo: MemoDTO) => void;
 }) {
   const { over, props, handleProps } = useItemDnd(memo, memoActions);
   return (
     <ScheduleRow
       memo={memo}
-      actions={actions}
       memoActions={memoActions}
       variant="rule"
       now={now}
-      highlight={highlight}
+      onShowRule={onShowRule}
       handleProps={handleProps}
       dnd={{
         ...props,

@@ -52,6 +52,7 @@ import { MailBentoLink } from "./cross-app-link";
 import type { MemoActions } from "./memo-item";
 import { MemoViewer } from "./memo-viewer";
 import { NotebookModal } from "./notebook-modal";
+import { ScheduleGridModal } from "./schedule-grid";
 import { AddNotebookCard, type NotebookHandlers } from "./notebook-card";
 import { PastePicker, type PendingPaste } from "./paste-picker";
 import { TransferPanel, useTransferSummary } from "./transfer-panel";
@@ -75,6 +76,11 @@ export function Dashboard({
   const [pending, setPending] = useState<PendingPaste | null>(null);
   const [viewerId, setViewerId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
+  // 반복 규칙 편집 표 — 어느 메모함의 어느 행을 열어둘지
+  const [rulesFor, setRulesFor] = useState<{
+    notebookId: string;
+    focusMemoId?: string;
+  } | null>(null);
   const [queueOpen, setQueueOpen] = useState(false);
   const errorTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -288,6 +294,8 @@ export function Dashboard({
         void run(() => api.deleteNotebook(id)).catch(() => undefined);
       },
       expand: (nb) => setExpandedId(nb.id),
+      editRules: (nb, focusMemoId) =>
+        setRulesFor({ notebookId: nb.id, focusMemoId }),
     }),
     [run, fail, patchMemo, notebooks, expandedId],
   );
@@ -349,6 +357,10 @@ export function Dashboard({
   const expanded = useMemo(
     () => notebooks.find((n) => n.id === expandedId) ?? null,
     [expandedId, notebooks],
+  );
+  const rulesNotebook = useMemo(
+    () => notebooks.find((n) => n.id === rulesFor?.notebookId) ?? null,
+    [rulesFor, notebooks],
   );
 
   // ─ 메모함 순서 DnD ─
@@ -499,6 +511,16 @@ export function Dashboard({
         memoActions={memoActions}
         handlers={handlers}
         onClose={() => setExpandedId(null)}
+      />
+
+      {/* 반복 규칙 편집 표 */}
+      <ScheduleGridModal
+        notebook={rulesNotebook}
+        actions={handlers.schedule}
+        memoActions={memoActions}
+        onAdd={handlers.addText}
+        focusMemoId={rulesFor?.focusMemoId ?? null}
+        onClose={() => setRulesFor(null)}
       />
 
       {/* 업로드 큐 */}
