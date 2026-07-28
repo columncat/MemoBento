@@ -33,7 +33,9 @@
     -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas,
     monospace;
-  --font-serif: "Instrument Serif", "Times New Roman", serif;
+  /* 웹폰트를 싣지 않는다. 폰트가 없는 PC 에서 나오던 폴백 모양이
+     기준이다 — 웹폰트를 그대로 두면 기기마다 제목이 달라 보인다. */
+  --font-serif: "Times New Roman", serif;
 
   --radius-card: 22px;
   --radius-app: 18px;

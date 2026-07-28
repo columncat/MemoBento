@@ -129,9 +129,11 @@ function ActionButtons({
   return (
     <div
       className={cn(
-        "flex items-center gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100",
-        floating &&
-          "absolute top-1.5 right-1.5 rounded-lg bg-(--color-surface)/90 p-0.5 ring-1 ring-(--color-border-soft) backdrop-blur-sm",
+        // 세로로 쌓되 흐름에서 빼 둔다. 그대로 두면 버튼 단(최대 76px)이
+        // 썸네일(40px)보다 커서 행 높이를 끌어올린다 — 목록이 훌쩍 성겨진다.
+        // 호버로만 나타나므로 본문 자리를 상시 차지할 이유도 없다.
+        "absolute z-10 flex flex-col items-center gap-0.5 rounded-lg bg-(--color-surface)/90 p-0.5 opacity-0 ring-1 ring-(--color-border-soft) backdrop-blur-sm transition group-hover:opacity-100 focus-within:opacity-100",
+        floating ? "top-1.5 right-1.5" : "top-1/2 right-1.5 -translate-y-1/2",
       )}
     >
       {memo.file && (
@@ -327,7 +329,7 @@ export function MemoRow({
     <li
       {...props}
       className={cn(
-        "group flex cursor-pointer items-start gap-2.5 rounded-lg bg-(--color-bg-2) p-2.5 ring-1 ring-(--color-border-soft) transition hover:bg-(--color-surface-hi) focus-visible:ring-(--color-accent)",
+        "group relative flex cursor-pointer items-start gap-2.5 rounded-lg bg-(--color-bg-2) p-2.5 pr-10 ring-1 ring-(--color-border-soft) transition hover:bg-(--color-surface-hi) focus-visible:ring-(--color-accent)",
         // 여기에 놓으면 이 항목 **앞**으로 들어간다
         over === "self" && "border-t-2 border-(--color-accent) pt-2",
       )}
