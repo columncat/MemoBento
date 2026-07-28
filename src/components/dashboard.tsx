@@ -127,27 +127,12 @@ export function Dashboard({
     }
   }, []);
 
-  // ─ 새로고침 (MailBento 가 같은 DB 를 고쳤을 수 있으므로 창 포커스 시에도) ─
-  const refresh = useCallback(
-    async (spinner = false) => {
-      if (spinner) setRefreshing(true);
-      try {
-        setNotebooks(await api.list());
-      } catch {
-        /* 조용히 무시 — 다음 시도에서 복구 */
-      } finally {
-        if (spinner) setRefreshing(false);
-      }
-    },
-    [],
-  );
-
-  useEffect(() => {
-    if (!legacySynced) return;
-    const onFocus = () => void refresh();
-    window.addEventListener("focus", onFocus);
-    return () => window.removeEventListener("focus", onFocus);
-  }, [legacySynced, refresh]);
+  // 자동 새로고침은 두지 않는다.
+  //
+  // 창 포커스마다 목록을 다시 받아 왔는데, 그때 메모 객체가 통째로 새로
+  // 만들어져 편집 중이던 내용이 날아갔다. 다른 창을 잠깐 다녀오는 것만으로도
+  // 쓰던 글이 사라지는 셈이라, 최신성보다 쓰던 것을 지키는 쪽을 택한다.
+  // MailBento 가 같은 DB 를 고친 경우는 브라우저 새로고침으로 따라잡는다.
 
   // ─ 붙여넣기 → 어느 메모함에 넣을지 묻는 플로팅 ─
   useEffect(() => {
@@ -321,15 +306,16 @@ export function Dashboard({
         if (!confirmMemoDelete("이 메모를 휴지통으로 옮길까요? (30일 안에 되살릴 수 있습니다)")) return;
         void run(() => api.deleteMemo(memo.id)).catch(() => undefined);
       },
-      onDropOnMemo: (payload, target) => {
-        // 같은 메모함 안 → 순서 변경 (끌어온 것을 대상 **앞**에 끼워 넣는다)
+      onDropOnMemo: (payload, target, side) => {
+        // 같은 메모함 안 → 순서 변경. 대상의 위쪽 절반에 놓으면 앞,
+        // 아래쪽이면 뒤 — 뒤가 없으면 맨 끝으로 내릴 방법이 사라진다.
         if (payload.notebookId !== target.notebookId) return;
         const nb = notebooks.find((n) => n.id === target.notebookId);
         if (!nb) return;
         const ids = nb.memos.map((m) => m.id).filter((id) => id !== payload.id);
         const at = ids.indexOf(target.id);
         if (at < 0) return;
-        ids.splice(at, 0, payload.id);
+        ids.splice(side === "after" ? at + 1 : at, 0, payload.id);
 
         // 낙관적 반영 — 드롭 즉시 자리가 잡히게
         const byId = new Map(nb.memos.map((m) => [m.id, m]));
@@ -442,18 +428,6 @@ export function Dashboard({
             )}
           </button>
           <MailBentoLink href={mailbentoUrl} />
-          <button
-            type="button"
-            onClick={() => void refresh(true)}
-            disabled={refreshing}
-            className={cn(
-              "flex items-center gap-2 rounded-full bg-(--color-surface) px-4 py-2 text-sm text-(--color-fg-2) ring-1 ring-(--color-border-soft) transition hover:bg-(--color-surface-2)",
-              refreshing && "opacity-60",
-            )}
-          >
-            <RefreshCw className={cn("h-4 w-4", refreshing && "animate-spin")} />
-            새로고침
-          </button>
           <Link
             href="/settings"
             className="flex items-center gap-2 rounded-full bg-(--color-accent-soft) px-4 py-2 text-sm text-(--color-accent-strong) ring-1 ring-(--color-accent)/40 transition hover:bg-(--color-accent)/25"

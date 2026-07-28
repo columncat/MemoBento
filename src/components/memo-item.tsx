@@ -33,7 +33,12 @@ export interface MemoActions {
   onEdit: (memo: MemoDTO) => void;
   onDelete: (memo: MemoDTO) => void;
   /** 다른 메모를 이 메모 위에 떨어뜨렸을 때 (같은 메모함이면 순서 변경). */
-  onDropOnMemo: (payload: MemoDragPayload, target: MemoDTO) => void;
+  onDropOnMemo: (
+    payload: MemoDragPayload,
+    target: MemoDTO,
+    /** 대상의 앞에 넣을지 뒤에 넣을지. */
+    side: "before" | "after",
+  ) => void;
 }
 
 /** 메모 종류 아이콘 — 썸네일이 없을 때 대신 보여준다. */
@@ -218,8 +223,16 @@ function ActionButtons({
  * lib/dnd 의 모듈 상태로 본다.
  */
 export function useItemDnd(memo: MemoDTO, actions: MemoActions) {
-  const [over, setOver] = useState<false | "self" | "reject">(false);
+  // 항목의 위쪽 절반에 오면 앞, 아래쪽 절반이면 뒤에 끼운다.
+  // 늘 앞에만 끼우면 목록의 맨 끝으로는 영영 내릴 수 없다.
+  const [over, setOver] = useState<false | "before" | "after" | "reject">(false);
   const rowRef = useRef<HTMLElement | null>(null);
+
+  /** 포인터가 항목의 위/아래 어느 쪽에 있는가. */
+  const sideOf = (e: React.DragEvent): "before" | "after" => {
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    return e.clientY < r.top + r.height / 2 ? "before" : "after";
+  };
 
   const dragged = () => activeMemoDrag();
   const relevant = (e: React.DragEvent) =>
@@ -276,7 +289,7 @@ export function useItemDnd(memo: MemoDTO, actions: MemoActions) {
         e.preventDefault();
         e.stopPropagation();
         e.dataTransfer.dropEffect = "move";
-        setOver("self");
+        setOver(sideOf(e));
       },
       onDragLeave: () => setOver(false),
 
@@ -295,7 +308,7 @@ export function useItemDnd(memo: MemoDTO, actions: MemoActions) {
         e.preventDefault();
         e.stopPropagation();
         if (payload.id === memo.id) return;
-        actions.onDropOnMemo(payload, memo);
+        actions.onDropOnMemo(payload, memo, sideOf(e));
       },
 
       onClick: () => actions.onOpen(memo),
@@ -364,8 +377,9 @@ export function MemoRow({
       {...props}
       className={cn(
         "group relative flex cursor-pointer items-start gap-2.5 rounded-lg bg-(--color-bg-2) p-2.5 pr-10 ring-1 ring-(--color-border-soft) transition hover:bg-(--color-surface-hi) focus-visible:ring-(--color-accent)",
-        // 여기에 놓으면 이 항목 **앞**으로 들어간다
-        over === "self" && "border-t-2 border-(--color-accent) pt-2",
+        // 놓으면 들어갈 자리를 선으로 알려 준다
+        over === "before" && "border-t-2 border-(--color-accent) pt-2",
+        over === "after" && "border-b-2 border-(--color-accent) pb-2",
       )}
     >
       <Thumb memo={memo} size="sm" handleProps={handleProps} />
@@ -413,7 +427,8 @@ export function MemoTile({
       {...props}
       className={cn(
         "group relative flex cursor-pointer flex-col overflow-hidden rounded-lg bg-(--color-bg-2) ring-1 ring-(--color-border-soft) transition hover:ring-(--color-accent)/50 focus-visible:ring-(--color-accent)",
-        over === "self" && "border-l-2 border-(--color-accent)",
+        over === "before" && "border-l-2 border-(--color-accent)",
+        over === "after" && "border-r-2 border-(--color-accent)",
       )}
     >
       <div className="relative aspect-4/3 w-full overflow-hidden">

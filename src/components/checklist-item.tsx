@@ -62,11 +62,13 @@ export function ChecklistRow({
     <li
       {...dnd}
       className={cn(
-        "group flex items-center gap-2 rounded-md px-2 py-1.5 transition hover:bg-(--color-surface-hi)",
+        "group flex items-center gap-1.5 rounded-md px-2 py-1.5 transition hover:bg-(--color-surface-hi)",
         memo.done && "opacity-60",
       )}
     >
-      <DragHandle handleProps={handleProps} className="h-4" />
+      {/* 손잡이는 얇게, 체크박스 바로 옆에. 넓게 잡으면 한 줄짜리 항목에서
+          손잡이가 본문만큼 자리를 먹는다. */}
+      <DragHandle handleProps={handleProps} className="mr-0.5 h-4 w-2" />
 
       {/* 체크박스 */}
       <button

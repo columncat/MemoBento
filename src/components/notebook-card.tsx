@@ -41,7 +41,7 @@ import type { MemoActions } from "./memo-item";
 export const KIND_META = {
   memo: { label: "메모", Icon: NotebookText, hint: "메모 또는 URL 입력 후 Enter" },
   checklist: { label: "체크리스트", Icon: ListChecks, hint: "할 일 입력 후 Enter" },
-  todo: { label: "TODO", Icon: CalendarClock, hint: "할 일 입력 후 Enter (기한은 나중에)" },
+  todo: { label: "TODO", Icon: CalendarClock, hint: "할 일 입력 후 Enter" },
   schedule: { label: "반복 일정", Icon: Repeat, hint: "일정 입력 후 Enter (주기는 나중에)" },
 } as const;
 

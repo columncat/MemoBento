@@ -325,6 +325,19 @@ function InstanceRow({
   );
 }
 
+/** 놓으면 들어갈 자리를 위/아래 선으로 알려 준다. */
+function insetLine(
+  over: false | "before" | "after" | "reject",
+): React.CSSProperties | undefined {
+  if (over === "before") {
+    return { boxShadow: "inset 0 2px 0 var(--color-accent)" };
+  }
+  if (over === "after") {
+    return { boxShadow: "inset 0 -2px 0 var(--color-accent)" };
+  }
+  return undefined;
+}
+
 /** 훅을 쓰기 위한 얇은 래퍼 — 순서 변경 DnD 는 일반 메모와 같은 규약을 쓴다. */
 function ChecklistItem({
   memo,
@@ -350,7 +363,7 @@ function ChecklistItem({
         // 한 줄 항목에서는 클릭이 편집이므로 열기 동작을 뺀다
         onClick: undefined,
         className: undefined,
-        style: over === "self" ? { boxShadow: "inset 0 2px 0 var(--color-accent)" } : undefined,
+        style: insetLine(over),
       }}
     />
   );
@@ -381,10 +394,7 @@ function ScheduleItem({
         ...props,
         onClick: undefined,
         className: undefined,
-        style:
-          over === "self"
-            ? { boxShadow: "inset 0 2px 0 var(--color-accent)" }
-            : undefined,
+        style: insetLine(over),
       }}
     />
   );
