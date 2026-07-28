@@ -27,6 +27,12 @@ export function SortableNotebookCard({
     isDragging,
   } = useSortable({ id: notebook.id });
 
+  const {
+    role: _role,
+    tabIndex: _tabIndex,
+    ...dragAria
+  } = attributes;
+
   return (
     <div
       ref={setNodeRef}
@@ -37,8 +43,14 @@ export function SortableNotebookCard({
         notebook={notebook}
         memoActions={memoActions}
         handlers={handlers}
+        // role / tabIndex 는 빼고 넘긴다. 손잡이가 머리말 자체라, 버튼을
+        // 여럿 품은 <header> 에 role="button" 을 씌우면 그 안의 버튼들이
+        // 보조기술에서 묻힌다. 실제 끌기는 포인터 리스너가 맡는다.
         dragHandleProps={
-          { ...attributes, ...listeners } as unknown as React.HTMLAttributes<HTMLButtonElement>
+          {
+            ...dragAria,
+            ...listeners,
+          } as unknown as React.HTMLAttributes<HTMLElement>
         }
       />
     </div>

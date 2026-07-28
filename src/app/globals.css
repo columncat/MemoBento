@@ -33,9 +33,12 @@
     -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas,
     monospace;
-  /* 웹폰트를 싣지 않는다. 폰트가 없는 PC 에서 나오던 폴백 모양이
-     기준이다 — 웹폰트를 그대로 두면 기기마다 제목이 달라 보인다. */
-  --font-serif: "Times New Roman", serif;
+  /* Instrument Serif 에는 한글이 없다. 그대로 두면 한글 제목만
+     시스템 기본 글꼴로 떨어져 같은 줄에서 두 모양이 섞인다.
+     한글은 나눔명조가 이어받는다 — 둘 다 웹폰트라 글꼴이 깔리지
+     않은 PC 에서도 같게 보인다. */
+  --font-serif: "Instrument Serif", "Nanum Myeongjo", "Times New Roman",
+    serif;
 
   --radius-card: 22px;
   --radius-app: 18px;

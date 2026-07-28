@@ -3,7 +3,6 @@
 import {
   CalendarClock,
   Check,
-  GripVertical,
   LayoutGrid,
   List,
   ListChecks,
@@ -12,7 +11,6 @@ import {
   Maximize2,
   NotebookText,
   Paperclip,
-  Pencil,
   Plus,
   Repeat,
   Table2,
@@ -71,7 +69,7 @@ interface Props {
   memoActions: MemoActions;
   handlers: NotebookHandlers;
   /** dnd-kit 드래그 핸들 props (정렬용). 없으면 핸들을 숨긴다. */
-  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
+  dragHandleProps?: React.HTMLAttributes<HTMLElement>;
   /** 확대 모달 안에서 쓸 때는 카드 높이를 고정하지 않는다. */
   flush?: boolean;
 }
@@ -301,26 +299,19 @@ export function NotebookCard({
     >
       {/* 헤더 */}
       <header
+        {...(dragHandleProps ?? {})}
+        title={dragHandleProps ? "머리말을 끌어 메모함 순서 변경" : undefined}
         className={cn(
           "flex flex-col items-start gap-1.5 border-b border-(--color-border-soft) px-4 py-3",
           // 카드가 좁으면(6단 등) 제목 줄 / 버튼 줄로 나눠 어느 것도 잘리지 않게 한다
           "@[330px]:flex-row @[330px]:items-center @[330px]:justify-between @[330px]:gap-2",
           // 확대 모달의 닫기 버튼과 겹치지 않게 여백 확보
           flush && "pr-12",
+          // 머리말 자체가 순서 손잡이다 — 아이콘을 따로 두지 않는다
+          dragHandleProps && "cursor-grab active:cursor-grabbing",
         )}
       >
         <div className="flex w-full min-w-0 items-center gap-2 @[330px]:w-auto">
-          {dragHandleProps && (
-            <button
-              type="button"
-              {...dragHandleProps}
-              className="grid h-7 w-5 shrink-0 cursor-grab place-items-center rounded text-(--color-fg-4) opacity-0 transition group-hover/card:opacity-100 hover:text-(--color-fg-2) active:cursor-grabbing"
-              aria-label="메모함 순서 바꾸기"
-              title="드래그로 순서 변경"
-            >
-              <GripVertical className="h-4 w-4" />
-            </button>
-          )}
 
           {editingName ? (
             <input
@@ -336,6 +327,7 @@ export function NotebookCard({
                 }
               }}
               maxLength={60}
+              onPointerDown={(e) => e.stopPropagation()}
               className="min-w-0 flex-1 rounded-md bg-(--color-bg-2) px-2 py-1 text-sm text-(--color-fg) ring-1 ring-(--color-accent)/60 outline-none"
             />
           ) : (
@@ -385,7 +377,10 @@ export function NotebookCard({
           </span>
         </div>
 
-        <div className="flex shrink-0 items-center gap-0.5">
+        <div
+          onPointerDown={(e) => e.stopPropagation()}
+          className="flex shrink-0 items-center gap-0.5"
+        >
           {uploading && (
             <Loader2 className="h-3.5 w-3.5 animate-spin text-(--color-accent)" />
           )}
@@ -407,18 +402,6 @@ export function NotebookCard({
             </button>
           )}
 
-          {canFiles && (
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className={iconBtn}
-              aria-label="파일 추가"
-              title="파일 추가 (드래그해서 놓아도 됩니다)"
-            >
-              <Paperclip className="h-3.5 w-3.5" />
-            </button>
-          )}
-
           {!flush && (
             <button
               type="button"
@@ -432,32 +415,18 @@ export function NotebookCard({
           )}
 
           {!locked && (
-            <>
-              <button
-                type="button"
-                onClick={() => {
-                  setDraftName(notebook.name);
-                  setEditingName(true);
-                }}
-                className={cn(iconBtn, "opacity-0 group-hover/card:opacity-100")}
-                aria-label="이름 변경"
-                title="이름 변경"
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => handlers.remove(notebook.id)}
-                className={cn(
-                  iconBtn,
-                  "opacity-0 group-hover/card:opacity-100 hover:bg-(--color-danger)/20 hover:text-(--color-danger)",
-                )}
-                aria-label="메모함 삭제"
-                title="메모함 삭제"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </>
+            <button
+              type="button"
+              onClick={() => handlers.remove(notebook.id)}
+              className={cn(
+                iconBtn,
+                "opacity-0 group-hover/card:opacity-100 hover:bg-(--color-danger)/20 hover:text-(--color-danger)",
+              )}
+              aria-label="메모함 삭제"
+              title="메모함 삭제"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
           )}
         </div>
       </header>
@@ -485,13 +454,36 @@ export function NotebookCard({
           rows={2}
           className="scrollbar-thin flex-1 resize-none rounded-lg bg-(--color-bg-2) px-3 py-2 text-sm leading-relaxed text-(--color-fg) ring-1 ring-(--color-border-soft) outline-none placeholder:text-(--color-fg-4) focus:ring-(--color-accent)/60"
         />
-        <button
-          type="submit"
-          className="flex shrink-0 items-center gap-1 self-stretch rounded-lg bg-(--color-accent) px-3 text-sm font-medium text-(--color-bg) transition hover:bg-(--color-accent-strong)"
-          aria-label="메모 추가"
-        >
-          <Plus className="h-4 w-4" />
-        </button>
+        {/* + 는 정사각형으로 두고, 입력칸 높이에서 남는 아래쪽을 파일 버튼이
+            채운다. 파일 추가는 머리말이 아니라 입력 옆에 있는 편이 가깝다. */}
+        <div className="flex shrink-0 flex-col gap-1">
+          <button
+            type="submit"
+            className={cn(
+              "grid aspect-square w-11 place-items-center rounded-lg bg-(--color-accent) text-(--color-bg) transition hover:bg-(--color-accent-strong)",
+              // 세로 flex 안에서는 self-stretch 가 가로로만 늘어난다.
+              // 파일 버튼이 없으면 + 가 남는 높이를 다 쓴다.
+              !canFiles && "aspect-auto w-11 flex-1",
+            )}
+            aria-label="메모 추가"
+            title="메모 추가"
+          >
+            <Plus className="h-4 w-4" />
+          </button>
+          {canFiles && (
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              // 최소 높이를 두면 입력칸(2줄)보다 세로가 커져 행 전체가 늘고
+              // textarea 도 함께 늘어난다. 없으면 16px 짜리 띠만 남는다.
+              className="grid min-h-9 w-11 flex-1 place-items-center rounded-lg bg-(--color-bg-2) text-(--color-fg-3) ring-1 ring-(--color-border-soft) transition hover:bg-(--color-surface-hi) hover:text-(--color-fg)"
+              aria-label="파일 추가"
+              title="파일 추가 (드래그해서 놓아도 됩니다)"
+            >
+              <Paperclip className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </form>
 
       {/* 본문 */}
