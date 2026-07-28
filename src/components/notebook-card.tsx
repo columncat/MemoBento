@@ -361,7 +361,7 @@ export function NotebookCard({
                   setEditingName(true);
                 }}
                 className="truncate text-[19.7px] leading-tight"
-                style={{ fontFamily: "var(--font-serif)" }}
+                style={{ fontFamily: "var(--font-notebook-title)" }}
               >
                 {notebook.name}
               </h2>
