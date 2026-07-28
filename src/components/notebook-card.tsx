@@ -32,6 +32,7 @@ import {
 import { cn } from "@/lib/utils";
 
 import type { ChecklistActions } from "./checklist-item";
+import { DuePicker } from "./due-picker";
 import { MemoList } from "./memo-list";
 import type { ScheduleActions } from "./schedule-item";
 import type { MemoActions } from "./memo-item";
@@ -45,7 +46,12 @@ export const KIND_META = {
 } as const;
 
 export interface NotebookHandlers {
-  addText: (notebookId: string, text: string) => Promise<void>;
+  addText: (
+    notebookId: string,
+    text: string,
+    /** TODO 메모함에서 기한을 함께 정해 추가할 때. */
+    dueAt?: number | null,
+  ) => Promise<void>;
   addLink: (notebookId: string, url: string) => Promise<void>;
   addFiles: (notebookId: string, files: File[]) => Promise<void>;
   /** 메모를 다른 메모함으로 이동. */
@@ -131,6 +137,10 @@ export function NotebookCard({
   flush,
 }: Props) {
   const [input, setInput] = useState("");
+  // TODO 메모함에서 다음에 추가할 항목의 기한. 여러 개를 같은 날짜로 넣는
+  // 일이 흔해서 한 번 정하면 지울 때까지 유지한다.
+  const [dueAt, setDueAt] = useState<number | null>(null);
+  const [dueOpen, setDueOpen] = useState(false);
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -146,6 +156,10 @@ export function NotebookCard({
 
   // 얇은 한 줄로 그리는 종류 — 보기 전환도, 파일도 없다
   const isTask = notebook.kind !== "memo";
+  const isTodo = notebook.kind === "todo";
+  // 반복 일정은 값이 많아 편집을 전부 표로 뺐다. 입력칸만 남겨 두면
+  // 주기 없는 항목만 만들어져 어디로 갔는지 알 수 없다.
+  const composer = notebook.kind !== "schedule";
   const placeholder = isTask
     ? KIND_META[notebook.kind].hint
     : canLink && canText
@@ -173,7 +187,7 @@ export function NotebookCard({
     try {
       const asLink = canLink && (!canText || looksLikeUrl(value));
       if (asLink) await handlers.addLink(notebook.id, value);
-      else await handlers.addText(notebook.id, value);
+      else await handlers.addText(notebook.id, value, isTodo ? dueAt : null);
     } catch {
       setInput(value); // 실패하면 입력 복구
     }
@@ -346,7 +360,7 @@ export function NotebookCard({
                   setDraftName(notebook.name);
                   setEditingName(true);
                 }}
-                className="truncate text-[17px] leading-tight"
+                className="truncate text-[19.7px] leading-tight"
                 style={{ fontFamily: "var(--font-serif)" }}
               >
                 {notebook.name}
@@ -432,6 +446,7 @@ export function NotebookCard({
       </header>
 
       {/* 입력 — 텍스트면 텍스트 메모, URL 이면 링크 메모 */}
+      {composer && (
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -454,6 +469,15 @@ export function NotebookCard({
           rows={2}
           className="scrollbar-thin flex-1 resize-none rounded-lg bg-(--color-bg-2) px-3 py-2 text-sm leading-relaxed text-(--color-fg) ring-1 ring-(--color-border-soft) outline-none placeholder:text-(--color-fg-4) focus:ring-(--color-accent)/60"
         />
+        {isTodo && (
+          <DuePicker
+            value={dueAt}
+            open={dueOpen}
+            onOpenChange={setDueOpen}
+            onChange={setDueAt}
+          />
+        )}
+
         {/* + 는 정사각형으로 두고, 입력칸 높이에서 남는 아래쪽을 파일 버튼이
             채운다. 파일 추가는 머리말이 아니라 입력 옆에 있는 편이 가깝다. */}
         <div className="flex shrink-0 flex-col gap-1">
@@ -485,6 +509,7 @@ export function NotebookCard({
           )}
         </div>
       </form>
+      )}
 
       {/* 본문 */}
       <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-4 py-3">

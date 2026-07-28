@@ -228,7 +228,8 @@ export function Dashboard({
   // ─ 메모함 조작 ─
   const handlers: NotebookHandlers = useMemo(
     () => ({
-      addText: (id, text) => run(() => api.createTextMemo(id, text)),
+      addText: (id, text, dueAt) =>
+        run(() => api.createTextMemo(id, text, dueAt)),
       addLink: (id, url) => run(() => api.createLinkMemo(id, url)),
       addFiles: async (id, files) => {
         const nb = notebooks.find((n) => n.id === id);

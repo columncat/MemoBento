@@ -39,8 +39,11 @@ export const api = {
   reorderNotebooks: (orderedIds: string[]) =>
     mutate("/api/notebooks/reorder", jsonInit("POST", { orderedIds })),
 
-  createTextMemo: (notebookId: string, text: string) =>
-    mutate("/api/memos", jsonInit("POST", { notebookId, type: "text", text })),
+  createTextMemo: (notebookId: string, text: string, dueAt?: number | null) =>
+    mutate(
+      "/api/memos",
+      jsonInit("POST", { notebookId, type: "text", text, dueAt }),
+    ),
 
   createLinkMemo: (notebookId: string, url: string, title?: string) =>
     mutate(

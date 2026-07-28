@@ -185,7 +185,7 @@ function InstanceView({
     return (
       <div className="rounded-lg border border-dashed border-(--color-border) px-4 py-8 text-center text-sm break-keep text-(--color-fg-3)">
         <CalendarDays className="mx-auto mb-1.5 h-4 w-4" />
-        반복할 일정을 입력하세요
+        머리말의 표 버튼을 눌러 반복 일정을 추가하세요
       </div>
     );
   }
@@ -219,10 +219,6 @@ function InstanceView({
         </div>
       ) : (
         <div>
-          <SectionHead>
-            앞으로 {DEFAULT_HORIZON_MONTHS}개월 · {upcoming.length}건 — 수정·삭제는 반복
-            규칙 목록에서
-          </SectionHead>
           {/* 날짜로 계층을 만들지 않고 일정 하나가 곧 한 항목이다.
               머리글이 없으므로 날짜는 각 행이 직접 달고 나온다. */}
           <ul className="flex flex-col gap-1">

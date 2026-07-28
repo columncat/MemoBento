@@ -11,6 +11,8 @@ const bodySchema = z.discriminatedUnion("type", [
     type: z.literal("text"),
     notebookId: z.string().min(1),
     text: z.string().trim().min(1, "내용이 비어 있습니다").max(20000),
+    /** TODO 기한 (unix ms). */
+    dueAt: z.number().int().nullable().optional(),
   }),
   z.object({
     type: z.literal("link"),
@@ -36,6 +38,7 @@ export async function POST(req: Request) {
         notebookId: input.notebookId,
         type: "text",
         text: input.text,
+        dueAt: input.dueAt ?? null,
       });
     } else {
       const url = normalizeUrl(input.url);

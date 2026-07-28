@@ -354,6 +354,8 @@ export interface CreateMemoInput {
   url?: string | null;
   iconUrl?: string | null;
   fileId?: string | null;
+  /** TODO 기한 (unix ms). 만들면서 바로 넣는다 — 만들고 고치면 요청이 둘이 된다. */
+  dueAt?: number | null;
 }
 
 export function createMemo(input: CreateMemoInput): string {
@@ -415,6 +417,7 @@ export function createMemo(input: CreateMemoInput): string {
       url: input.url ?? null,
       iconUrl: input.iconUrl ?? null,
       fileId: input.fileId ?? null,
+      dueAt: input.dueAt != null ? new Date(input.dueAt) : null,
       position: minPos - 1,
     })
     .run();

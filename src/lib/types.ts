@@ -151,19 +151,57 @@ export function isOverdue(dueAt: number | null, done: boolean): boolean {
   return end.getTime() < Date.now();
 }
 
-/** 기한을 짧게 — 오늘/내일/어제는 말로, 그 외엔 날짜. */
+/**
+ * 날짜만 정한 기한은 그날 정오로 저장한다.
+ *
+ * dueAt 은 시각까지 담는 하나의 값이라 "시각 없음"을 따로 표시할 자리가 없다.
+ * 정오를 그 자리로 쓴다 — 시간대가 밀려도 날짜가 바뀌지 않는 유일한 시각이다.
+ */
+export const DUE_NOON_MINUTES = 12 * 60;
+
+/** 이 기한에 시각이 함께 지정되어 있는가. */
+export function dueHasTime(dueAt: number): boolean {
+  const d = new Date(dueAt);
+  return d.getHours() * 60 + d.getMinutes() !== DUE_NOON_MINUTES;
+}
+
+/** 기한을 짧게 — 오늘/내일/어제는 말로, 그 외엔 날짜. 시각이 있으면 함께. */
 export function formatDue(dueAt: number): string {
   const d = new Date(dueAt);
   const t = new Date();
   const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   const diff = Math.round((day(d) - day(t)) / 86400000);
-  if (diff === 0) return "오늘";
-  if (diff === 1) return "내일";
-  if (diff === -1) return "어제";
+  const time = dueHasTime(dueAt)
+    ? ` ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`
+    : "";
+  if (diff === 0) return `오늘${time}`;
+  if (diff === 1) return `내일${time}`;
+  if (diff === -1) return `어제${time}`;
   const mm = String(d.getMonth() + 1).padStart(2, "0");
   const dd = String(d.getDate()).padStart(2, "0");
-  if (d.getFullYear() !== t.getFullYear()) return `${d.getFullYear()}.${mm}.${dd}`;
-  return `${mm}.${dd}`;
+  if (d.getFullYear() !== t.getFullYear()) {
+    return `${d.getFullYear()}.${mm}.${dd}${time}`;
+  }
+  return `${mm}.${dd}${time}`;
+}
+
+/** <input type="time"> 값. 시각이 없으면 빈 문자열. */
+export function toTimeInput(dueAt: number | null): string {
+  if (!dueAt || !dueHasTime(dueAt)) return "";
+  const d = new Date(dueAt);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+/** 날짜(YYYY-MM-DD)와 시각(HH:mm, 없으면 정오)을 하나의 기한으로. */
+export function composeDue(date: string, time?: string): number | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date.trim());
+  if (!m) return null;
+  const tm = /^(\d{1,2}):(\d{2})$/.exec((time ?? "").trim());
+  const h = tm ? Number(tm[1]) : 12;
+  const min = tm ? Number(tm[2]) : 0;
+  if (h > 23 || min > 59) return null;
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), h, min);
+  return Number.isNaN(d.getTime()) ? null : d.getTime();
 }
 
 /** <input type="date"> 값 (YYYY-MM-DD). */
