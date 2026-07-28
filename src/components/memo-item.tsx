@@ -54,16 +54,44 @@ export function MemoIcon({
 }
 
 /** 썸네일 또는 아이콘/파비콘. */
-function Thumb({ memo, size }: { memo: MemoDTO; size: "sm" | "lg" }) {
+/**
+ * 항목의 얼굴. 손잡이 props 를 주면 이것이 곧 순서 손잡이가 된다.
+ *
+ * 끌기 전용 손잡이를 따로 두면 좁은 카드에서 본문 폭을 먹고, 호버로만
+ * 드러나 있는 줄도 모른다. 썸네일은 늘 보이고 늘 같은 자리에 있다.
+ */
+function Thumb({
+  memo,
+  size,
+  handleProps,
+}: {
+  memo: MemoDTO;
+  size: "sm" | "lg";
+  handleProps?: Record<string, unknown>;
+}) {
   const swReady = useSwReady();
   const box = size === "sm" ? "h-10 w-10 rounded-md" : "h-full w-full rounded-none";
+  // 클릭은 그대로 흘려보낸다 — 끌었다 놓아도 click 은 발생하지 않으므로,
+  // 썸네일을 눌러 여는 동작과 끌어 옮기는 동작이 부딪히지 않는다.
+  const grab = handleProps
+    ? {
+        ...handleProps,
+        onClick: undefined,
+        role: "button" as const,
+        "aria-label": "끌어서 옮기기",
+        title: "끌어서 옮기기 / 순서 변경",
+      }
+    : {};
+  const grabCls = handleProps ? "cursor-grab active:cursor-grabbing" : "";
 
   if (memo.type === "link" && memo.iconUrl) {
     return (
       <div
+        {...grab}
         className={cn(
           "grid shrink-0 place-items-center bg-(--color-bg-2)",
           box,
+          grabCls,
           size === "lg" && "p-6",
         )}
       >
@@ -71,6 +99,9 @@ function Thumb({ memo, size }: { memo: MemoDTO; size: "sm" | "lg" }) {
         <img
           src={memo.iconUrl}
           alt=""
+          // 이미지는 기본으로 끌리므로 브라우저의 이미지 드래그가 먼저 걸린다.
+          // 끌기는 감싼 상자(=손잡이)만 맡는다.
+          draggable={false}
           className={cn(
             "object-contain",
             size === "sm" ? "h-6 w-6" : "h-full w-full max-h-16 max-w-16",
@@ -85,12 +116,13 @@ function Thumb({ memo, size }: { memo: MemoDTO; size: "sm" | "lg" }) {
 
   if (memo.file?.hasThumb) {
     return (
-      <div className={cn("thumb-checker shrink-0 overflow-hidden", box)}>
+      <div {...grab} className={cn("thumb-checker shrink-0 overflow-hidden", box, grabCls)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={thumbUrl(memo.file, swReady)}
           alt=""
           loading="lazy"
+          draggable={false}
           className="h-full w-full object-cover"
         />
       </div>
@@ -99,9 +131,11 @@ function Thumb({ memo, size }: { memo: MemoDTO; size: "sm" | "lg" }) {
 
   return (
     <div
+      {...grab}
       className={cn(
         "grid shrink-0 place-items-center bg-(--color-bg-2) text-(--color-fg-4)",
         box,
+        grabCls,
       )}
     >
       <MemoIcon memo={memo} className={size === "sm" ? "h-4 w-4" : "h-8 w-8"} />
@@ -334,8 +368,7 @@ export function MemoRow({
         over === "self" && "border-t-2 border-(--color-accent) pt-2",
       )}
     >
-      <DragHandle handleProps={handleProps} />
-      <Thumb memo={memo} size="sm" />
+      <Thumb memo={memo} size="sm" handleProps={handleProps} />
 
       {/* select-text — 본문은 끌어서 선택·복사할 수 있어야 한다 */}
       <div className="min-w-0 flex-1 select-text">
@@ -392,15 +425,22 @@ export function MemoTile({
           <Thumb memo={memo} size="lg" />
         )}
         <ActionButtons memo={memo} actions={actions} floating />
-        <DragHandle
-          handleProps={handleProps}
-          className="absolute top-1.5 left-1.5 h-5 rounded bg-(--color-surface)/90 ring-1 ring-(--color-border-soft) backdrop-blur-sm"
-        />
       </div>
 
       <div className="border-t border-(--color-border-soft) px-2 py-1.5">
         <div className="flex items-center gap-1.5">
-          <MemoIcon memo={memo} className="h-3 w-3 shrink-0 text-(--color-fg-4)" />
+          {/* 타일은 텍스트 메모에 썸네일이 없다. 종류 아이콘은 어떤 메모든
+              늘 있으므로 여기가 손잡이다. */}
+          <span
+            {...handleProps}
+            onClick={undefined}
+            role="button"
+            aria-label="끌어서 옮기기"
+            title="끌어서 옮기기 / 순서 변경"
+            className="grid h-5 w-5 shrink-0 cursor-grab place-items-center rounded text-(--color-fg-4) transition hover:text-(--color-fg-2) active:cursor-grabbing"
+          >
+            <MemoIcon memo={memo} className="h-3.5 w-3.5" />
+          </span>
           <span className="truncate text-[11.5px] text-(--color-fg-2)">
             {memo.type === "text"
               ? formatRelativeTime(memo.createdAt) || "메모"

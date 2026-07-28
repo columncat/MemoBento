@@ -3,6 +3,7 @@
 import {
   CalendarClock,
   Check,
+  GripVertical,
   LayoutGrid,
   List,
   ListChecks,
@@ -73,47 +74,6 @@ interface Props {
   dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
   /** 확대 모달 안에서 쓸 때는 카드 높이를 고정하지 않는다. */
   flush?: boolean;
-}
-
-/**
- * 메모함 종류 아이콘 겸 순서 손잡이.
- *
- * 아이콘은 늘 보이므로 끌 수 있다는 것도 늘 보인다. 확대 모달처럼 순서를
- * 바꿀 수 없는 자리에서는 같은 모양의 장식으로만 남는다.
- */
-function KindHandle({
-  notebook,
-  dragHandleProps,
-}: {
-  notebook: NotebookDTO;
-  dragHandleProps?: React.HTMLAttributes<HTMLButtonElement>;
-}) {
-  const { label, Icon } = KIND_META[notebook.kind];
-  const shape =
-    "grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-(--color-bg-2) text-(--color-fg-3) ring-1 ring-(--color-border-soft)";
-
-  if (!dragHandleProps) {
-    return (
-      <span className={shape} title={label} aria-label={label}>
-        <Icon className="h-3.5 w-3.5" />
-      </span>
-    );
-  }
-
-  return (
-    <button
-      type="button"
-      {...dragHandleProps}
-      className={cn(
-        shape,
-        "cursor-grab transition hover:text-(--color-fg) active:cursor-grabbing",
-      )}
-      aria-label={`${label} 메모함 — 끌어서 순서 변경`}
-      title={`${label} · 끌어서 순서 변경`}
-    >
-      <Icon className="h-3.5 w-3.5" />
-    </button>
-  );
 }
 
 /**
@@ -350,9 +310,17 @@ export function NotebookCard({
         )}
       >
         <div className="flex w-full min-w-0 items-center gap-2 @[330px]:w-auto">
-          {/* 종류 아이콘이 곧 순서 손잡이다. 손잡이를 따로 두면 좁은 헤더에서
-              아이콘과 나란히 자리를 먹고, 숨겨 두면 있는 줄도 모른다. */}
-          <KindHandle notebook={notebook} dragHandleProps={dragHandleProps} />
+          {dragHandleProps && (
+            <button
+              type="button"
+              {...dragHandleProps}
+              className="grid h-7 w-5 shrink-0 cursor-grab place-items-center rounded text-(--color-fg-4) opacity-0 transition group-hover/card:opacity-100 hover:text-(--color-fg-2) active:cursor-grabbing"
+              aria-label="메모함 순서 바꾸기"
+              title="드래그로 순서 변경"
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+          )}
 
           {editingName ? (
             <input
@@ -399,6 +367,18 @@ export function NotebookCard({
               className="h-3 w-3 shrink-0 text-(--color-fg-4)"
               aria-label="시스템 예약 메모함"
             />
+          )}
+          {isTask && (
+            <span
+              className="flex shrink-0 items-center gap-1 rounded-full bg-(--color-bg-2) px-1.5 py-0.5 text-[10px] text-(--color-fg-3)"
+              title={KIND_META[notebook.kind].label}
+            >
+              {(() => {
+                const I = KIND_META[notebook.kind].Icon;
+                return <I className="h-2.5 w-2.5" />;
+              })()}
+              {KIND_META[notebook.kind].label}
+            </span>
           )}
           <span className="shrink-0 font-mono text-[11px] text-(--color-fg-4)">
             {String(notebook.memos.length).padStart(2, "0")}
