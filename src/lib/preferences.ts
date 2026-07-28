@@ -17,7 +17,7 @@ export const DEFAULT_THEME: ThemeKey = "forest";
 
 export const MODES = ["dark", "light"] as const;
 export type ModePref = (typeof MODES)[number];
-export const DEFAULT_MODE: ModePref = "dark";
+export const DEFAULT_MODE: ModePref = "light";
 
 /**
  * 메모함 그리드 열 개수. 위젯 윙이 없어 가로를 전부 쓸 수 있으므로 6단까지 연다.

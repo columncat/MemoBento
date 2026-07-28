@@ -35,7 +35,7 @@ export default function RootLayout({
         {/* hydration 전에 테마 클래스 적용 — FOUC 방지 */}
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var t=localStorage.getItem('memobento.theme')||'forest';var m=localStorage.getItem('memobento.mode')||'dark';document.documentElement.className='theme-'+t+' mode-'+m;}catch(e){}})();`,
+            __html: `(function(){try{var t=localStorage.getItem('memobento.theme')||'forest';var m=localStorage.getItem('memobento.mode')||'light';document.documentElement.className='theme-'+t+' mode-'+m;}catch(e){}})();`,
           }}
         />
         {children}
