@@ -1,5 +1,5 @@
 import { cookies, headers } from "next/headers";
-import { NextResponse, type NextRequest } from "next/server";
+import { type NextRequest } from "next/server";
 
 import {
   REMEMBER_COOKIE_NAME,
@@ -10,6 +10,7 @@ import {
   nowSeconds,
   sessionCookieOptions,
 } from "@/lib/auth";
+import { redirectTo } from "@/lib/redirect";
 import {
   encryptSession,
   verifySession,
@@ -18,18 +19,18 @@ import {
 
 export async function GET(req: NextRequest) {
   if (!isAuthEnabled()) {
-    return NextResponse.redirect(new URL("/", req.url));
+    return redirectTo("/");
   }
 
   const cookieStore = await cookies();
   const rememberToken = cookieStore.get(REMEMBER_COOKIE_NAME)?.value;
   if (!rememberToken) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    return redirectTo("/login");
   }
 
   const verified = await verifySession(rememberToken);
   if (!verified) {
-    return NextResponse.redirect(new URL("/login", req.url));
+    return redirectTo("/login");
   }
 
   const ua = (await headers()).get("user-agent") ?? "unknown";
@@ -53,5 +54,5 @@ export async function GET(req: NextRequest) {
 
   const to = req.nextUrl.searchParams.get("to") || "/";
   const safeTo = to.startsWith("/") && !to.startsWith("//") ? to : "/";
-  return NextResponse.redirect(new URL(safeTo, req.url));
+  return redirectTo(safeTo);
 }

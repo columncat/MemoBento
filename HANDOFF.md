@@ -137,6 +137,23 @@ DB 는 첫 쿼리 때 지연 초기화된다(`lib/db/index.ts`). 인증이 켜�
 인라인 `style={{ color: "var(--...)" }}` 로만 쓰는 값(항목 글자 색 팔레트,
 메모함 제목 글꼴)은 **`:root` 에 두어야 한다**.
 
+### 3.11 route handler 의 리다이렉트는 상대 경로로 준다
+
+`NextResponse.redirect(new URL("/login", req.url))` 은 **쓰지 않는다**.
+standalone 빌드의 route handler 에서 `req.url` 의 오리진은 요청의 Host 가 아니라
+서버가 바인드한 주소로 채워진다. Dockerfile 이 `HOSTNAME=0.0.0.0` 이므로 그대로
+절대 URL 을 만들면 `Location: http://0.0.0.0:3000/login` 이 나가고 브라우저가
+거기로 끌려간다. Host 헤더를 무엇으로 주든 똑같다.
+
+미들웨어는 증상이 없다 — Next 가 같은 오리진이면 상대 경로로 정규화해 준다.
+그래서 **route handler 에서만** 터지고, 그중에서도 세션 만료 후 자동 갱신
+(`/api/auth/auto-renew`)과 로그아웃에서만 지나가므로 "가끔" 처럼 보인다.
+
+`lib/redirect.ts` 의 `redirectTo()` 를 쓸 것. Location 은 상대 경로여도 되고
+(RFC 9110 §10.2.2) 브라우저가 현재 오리진 기준으로 풀어 주므로 LAN·Tailscale·
+리버스 프록시 어디로 들어왔든 따라온다. Host 헤더를 믿고 오리진을 되짜맞추는
+방법도 있지만 그건 헤더 위조로 열린 리다이렉트가 되는 길을 새로 여는 셈이다.
+
 ---
 
 ## 4. 자주 건드리게 되는 곳
