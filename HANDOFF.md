@@ -137,7 +137,25 @@ DB 는 첫 쿼리 때 지연 초기화된다(`lib/db/index.ts`). 인증이 켜�
 인라인 `style={{ color: "var(--...)" }}` 로만 쓰는 값(항목 글자 색 팔레트,
 메모함 제목 글꼴)은 **`:root` 에 두어야 한다**.
 
-### 3.11 route handler 의 리다이렉트는 상대 경로로 준다
+### 3.11 다운로드는 `<a download>` 으로 걸면 안 된다
+
+`download` 속성이 붙은 요청은 브라우저의 다운로드 관리자가 직접 내보내며
+**서비스 워커를 거치지 않는다.** 복호화 경로인 `/dl/...` 이 워커를 지나쳐 서버까지
+가는데 서버에는 그런 라우트가 없어 404 가 되고, 크롬은 "사이트에서 사용할 수 없는
+파일" 로 끝낸다. 화면에서 여는 것(`<img>` · `<iframe>` · `fetch`)은 subresource 라
+워커를 타므로 미리보기만 멀쩡하고 다운로드만 실패한다.
+
+**내비게이션은 워커가 가로챈다**(`mode: "navigate"`). 그래서 `lib/download.ts` 의
+`startDownload()` 가 숨은 iframe 을 그 주소로 보낸다. 워커가
+`Content-Disposition: attachment` 로 답하므로 브라우저가 그대로 내려받고 화면은
+남는다. 최상위 이동을 쓰지 않는 것은 워커가 없을 때 404 페이지가 앱을 밀어내지
+않게 하기 위해서다.
+
+암호화 파일인데 워커가 아직 안 잡혔으면 **막는다**(`downloadBlocker`). 예전에는
+그대로 원본 URL 로 떨어져 **암호문이 저장**됐다 — 다운로드는 성공한 것처럼 보이고
+파일만 안 열리므로 조용히 깨진다.
+
+### 3.12 route handler 의 리다이렉트는 상대 경로로 준다
 
 `NextResponse.redirect(new URL("/login", req.url))` 은 **쓰지 않는다**.
 standalone 빌드의 route handler 에서 `req.url` 의 오리진은 요청의 Host 가 아니라

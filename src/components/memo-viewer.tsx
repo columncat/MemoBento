@@ -13,6 +13,7 @@ import {
 import { useEffect, useState } from "react";
 
 import { confirmMemoDelete } from "@/lib/preferences";
+import { downloadBlocker, startDownload } from "@/lib/download";
 import { useSwReady } from "@/lib/sw-client";
 import {
   formatBytes,
@@ -157,7 +158,12 @@ export function MemoViewer({ memo, onClose, onSave, onDelete }: Props) {
               {memo.file && (
                 <a
                   href={viewUrl(memo.file, { dl: true, swReady })}
-                  download={memo.file.name}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    startDownload(memo.file!, swReady);
+                  }}
+                  aria-disabled={!!downloadBlocker(memo.file, swReady)}
+                  title={downloadBlocker(memo.file, swReady) ?? undefined}
                   className="flex items-center gap-1.5 rounded-full bg-(--color-bg-2) px-3 py-1.5 text-xs text-(--color-fg-2) ring-1 ring-(--color-border-soft) transition hover:bg-(--color-surface-hi)"
                 >
                   <Download className="h-3.5 w-3.5" />
@@ -325,11 +331,21 @@ function ViewerBody({
       </p>
       <a
         href={viewUrl(file, { dl: true, swReady })}
-        download={file.name}
+        onClick={(e) => {
+          e.preventDefault();
+          startDownload(file, swReady);
+        }}
+        aria-disabled={!!downloadBlocker(file, swReady)}
+        title={downloadBlocker(file, swReady) ?? undefined}
         className="rounded-full bg-(--color-accent) px-4 py-2 text-xs font-medium text-(--color-bg) hover:bg-(--color-accent-strong)"
       >
         다운로드 ({formatBytes(file.size)})
       </a>
+      {downloadBlocker(file, swReady) && (
+        <p className="text-xs text-(--color-warn)">
+          {downloadBlocker(file, swReady)}
+        </p>
+      )}
     </div>
   );
 }

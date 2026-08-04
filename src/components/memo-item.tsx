@@ -15,6 +15,7 @@ import {
 import { useRef, useState } from "react";
 
 import { activeMemoDrag, beginMemoDrag, endMemoDrag } from "@/lib/dnd";
+import { downloadBlocker, startDownload } from "@/lib/download";
 import { useSwReady } from "@/lib/sw-client";
 import {
   MEMO_DND_TYPE,
@@ -178,11 +179,15 @@ function ActionButtons({
       {memo.file && (
         <a
           href={viewUrl(memo.file, { dl: true, swReady })}
-          download={memo.file.name}
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation();
+            e.preventDefault();
+            startDownload(memo.file!, swReady);
+          }}
           className={btn}
           aria-label="다운로드"
-          title="다운로드"
+          aria-disabled={!!downloadBlocker(memo.file, swReady)}
+          title={downloadBlocker(memo.file, swReady) ?? "다운로드"}
         >
           <Download className="h-3 w-3" />
         </a>

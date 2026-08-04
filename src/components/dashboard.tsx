@@ -26,6 +26,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "@/lib/client-api";
+import { startDownload } from "@/lib/download";
 import { registerDecryptWorker, useSwReady } from "@/lib/sw-client";
 import {
   enqueueUploads,
@@ -41,7 +42,6 @@ import {
 import {
   autoIconUrl,
   looksLikeUrl,
-  viewUrl,
   type MemoDTO,
   type NotebookDTO,
   type ViewMode,
@@ -296,7 +296,7 @@ export function Dashboard({
         }
         // 앱에서 열 수 없는 일반 파일은 클릭 즉시 다운로드
         if (memo.file && memo.file.kind === "file") {
-          triggerDownload(viewUrl(memo.file, { dl: true, swReady }), memo.file.name);
+          startDownload(memo.file, swReady);
           return;
         }
         setViewerId(memo.id);
@@ -526,15 +526,4 @@ export function Dashboard({
       )}
     </main>
   );
-}
-
-/** 열람 불가 형식 — 클릭 즉시 다운로드. */
-function triggerDownload(href: string, name: string) {
-  const a = document.createElement("a");
-  a.href = href;
-  a.download = name;
-  a.rel = "noreferrer";
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
 }
