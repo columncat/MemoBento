@@ -1,7 +1,7 @@
 "use client";
 
 import { CalendarDays, CalendarOff, Check, Trash2 } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import {
   formatDue,
@@ -52,6 +52,7 @@ export function ChecklistRow({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(memo.text ?? "");
   const [duePickerOpen, setDuePickerOpen] = useState(false);
+  const dueBtnRef = useRef<HTMLButtonElement | null>(null);
   const overdue = isOverdue(memo.dueAt, memo.done);
 
   const commit = () => {
@@ -155,6 +156,7 @@ export function ChecklistRow({
           {kind === "todo" && (
             <span className="relative">
               <button
+                ref={dueBtnRef}
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
@@ -173,6 +175,7 @@ export function ChecklistRow({
               {duePickerOpen && (
                 <DuePanel
                   value={memo.dueAt}
+                  anchor={dueBtnRef.current}
                   align="right"
                   onCancel={() => setDuePickerOpen(false)}
                   onPick={(next) => {

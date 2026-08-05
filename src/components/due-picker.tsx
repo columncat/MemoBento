@@ -1,7 +1,8 @@
 "use client";
 
 import { CalendarDays } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { composeDue, formatDue, toDateInput, toTimeInput } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -28,9 +29,11 @@ export function DuePicker({
   onOpenChange: (open: boolean) => void;
   onChange: (dueAt: number | null) => void;
 }) {
+  const btnRef = useRef<HTMLButtonElement | null>(null);
   return (
     <div className="relative flex shrink-0 flex-col">
       <button
+        ref={btnRef}
         type="button"
         onClick={() => onOpenChange(!open)}
         className={cn(
@@ -53,6 +56,7 @@ export function DuePicker({
       {open && (
         <DuePanel
           value={value}
+          anchor={btnRef.current}
           onCancel={() => onOpenChange(false)}
           onPick={(next) => {
             onChange(next);
@@ -74,15 +78,25 @@ export function DuePanel({
   value,
   onPick,
   onCancel,
+  anchor,
   align = "left",
 }: {
   value: number | null;
   onPick: (dueAt: number | null) => void;
   onCancel: () => void;
-  /** 붙일 쪽. 오른쪽 끝 버튼에 달면 left 로 두면 화면 밖으로 나간다. */
+  /**
+   * 어느 요소에 붙일지. 이걸 기준으로 화면 좌표를 잡는다.
+   *
+   * 패널은 `document.body` 로 포털해서 띄운다. 메모 목록은 `overflow-y-auto`
+   * 라서 그 안에 두면 카드 경계에서 잘린다 — `z-index` 로는 해결되지 않는다.
+   * 자르는 것은 쌓임 순서가 아니라 넘침 처리이기 때문이다.
+   */
+  anchor: HTMLElement | null;
+  /** 가로 정렬 기준. 오른쪽 끝 버튼에 달면 right 가 자연스럽다. */
   align?: "left" | "right";
 }) {
   const boxRef = useRef<HTMLDivElement | null>(null);
+  const [pos, setPos] = useState<{ top: number; left: number } | null>(null);
   const [date, setDate] = useState(() => toDateInput(value));
   const [time, setTime] = useState(() => toTimeInput(value));
   const [error, setError] = useState<string | null>(null);
@@ -93,11 +107,57 @@ export function DuePanel({
 
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
-      if (!boxRef.current?.contains(e.target as Node)) onCancel();
+      const target = e.target as Node;
+      // 트리거 버튼을 다시 누르는 것은 "닫기" 로 이미 처리된다. 여기서도
+      // 닫아 버리면 두 번 토글돼 아무 일도 일어나지 않은 것처럼 보인다.
+      if (boxRef.current?.contains(target) || anchor?.contains(target)) return;
+      onCancel();
     };
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
-  }, [onCancel]);
+  }, [onCancel, anchor]);
+
+  /**
+   * 화면 좌표 잡기.
+   *
+   * 위에 자리가 모자라면 아래로 뒤집고, 가로로는 화면 밖으로 나가지 않게 민다.
+   * 스크롤·리사이즈에도 따라붙는다 — 카드 목록은 스크롤되는 영역이라 고정
+   * 좌표만 잡아 두면 패널만 제자리에 남는다.
+   */
+  useLayoutEffect(() => {
+    if (!anchor) return;
+    const place = () => {
+      const box = boxRef.current;
+      if (!box) return;
+      const a = anchor.getBoundingClientRect();
+      const w = box.offsetWidth || 256;
+      const h = box.offsetHeight || 320;
+      const gap = 4;
+      const margin = 8;
+
+      const above = a.top - gap - h;
+      const below = a.bottom + gap;
+      const top =
+        above >= margin
+          ? above
+          : below + h <= window.innerHeight - margin
+            ? below
+            : Math.max(margin, window.innerHeight - h - margin);
+
+      let left = align === "right" ? a.right - w : a.left;
+      left = Math.min(left, window.innerWidth - w - margin);
+      left = Math.max(margin, left);
+      setPos({ top, left });
+    };
+    place();
+    window.addEventListener("resize", place);
+    // capture — 안쪽 스크롤 컨테이너의 스크롤도 잡아야 한다
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [anchor, align]);
 
   const grid = useMemo(() => buildMonth(cursor), [cursor]);
   const today = toDateInput(Date.now());
@@ -115,14 +175,17 @@ export function DuePanel({
     onPick(due);
   };
 
-  return (
+  const panel = (
     <div
       ref={boxRef}
       onPointerDown={(e) => e.stopPropagation()}
-      className={cn(
-        "absolute bottom-full z-40 mb-1 w-64 rounded-xl border border-(--color-border) bg-(--color-surface) p-3 shadow-xl",
-        align === "right" ? "right-0" : "left-0",
-      )}
+      style={{
+        top: pos?.top ?? 0,
+        left: pos?.left ?? 0,
+        // 좌표를 잡기 전에 그리면 왼쪽 위에서 튀어나온다
+        visibility: pos ? "visible" : "hidden",
+      }}
+      className="fixed z-50 w-64 rounded-xl border border-(--color-border) bg-(--color-surface) p-3 shadow-xl"
     >
       <div className="flex flex-col gap-2.5 text-[12px] text-(--color-fg-2)">
         {/* 달력 */}
@@ -239,6 +302,10 @@ export function DuePanel({
       </div>
     </div>
   );
+
+  // 서버에서는 그리지 않는다 (열려 있을 때만 붙으므로 실제로는 도달하지 않는다)
+  if (typeof document === "undefined") return null;
+  return createPortal(panel, document.body);
 }
 
 /** 그 달의 칸들. 앞쪽 빈칸은 null. */

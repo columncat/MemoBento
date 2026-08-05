@@ -206,6 +206,11 @@ standalone 빌드의 route handler 에서 `req.url` 의 오리진은 요청의 H
 이름 변경·삭제가 잠긴다는 뜻뿐이다. `acceptedTypes` 와 `legacyTargetOf` 가 앞의 둘만
 특별 취급하므로 새 키를 더해도 레거시 경로에 끌려가지 않는다.
 
+예약 메모함의 **종류는 코드가 정의하는 값**이라 `ensureSystemNotebooks` 가 어긋난
+것을 되돌린다. `onConflictDoNothing` 만 두면 이미 만들어진 곳에서는 옛 종류가 그대로
+남아 코드를 고쳐도 화면이 따라오지 않는다. 이름과 접힘 여부는 사용자 몫이라 건드리지
+않는다.
+
 ### 3.14 `/api/login` 은 사람이 아닌 클라이언트용이다
 
 화면 로그인은 서버 액션이라 폼 인코딩과 액션 ID 를 알아야 부를 수 있다. MCP 서버나

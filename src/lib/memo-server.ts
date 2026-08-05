@@ -57,7 +57,7 @@ export const SYSTEM_NOTEBOOKS: {
    * 접기는 언제든 풀 수 있다.
    */
   { id: "sys-agent-memory", systemKey: "agent-memory", name: "Memory for Agents", position: 900, kind: "memo", hidden: true },
-  { id: "sys-agent-schedule", systemKey: "agent-schedule", name: "Schedule for Agents", position: 901, kind: "todo", hidden: true },
+  { id: "sys-agent-schedule", systemKey: "agent-schedule", name: "Schedule for Agents", position: 901, kind: "schedule", hidden: true },
 ];
 
 /**
@@ -134,6 +134,22 @@ export function ensureSystemNotebooks(): void {
       })
       .onConflictDoNothing()
       .run();
+
+    /*
+     * 종류는 여기서 정하는 값이라 어긋나면 되돌린다.
+     *
+     * 사용자 메모함은 종류를 바꿀 수 없지만 예약 메모함의 종류는 우리가 정의하는
+     * 것이다. onConflictDoNothing 만 두면 이미 만들어진 곳에서는 옛 종류가 그대로
+     * 남아, 코드가 바뀌어도 화면이 따라오지 않는다.
+     * 접힘 여부와 이름은 건드리지 않는다 — 그건 사용자 몫이다.
+     */
+    const row = getNotebook(nb.id);
+    if (row && row.kind !== nb.kind) {
+      db.update(schema.notebooks)
+        .set({ kind: nb.kind, updatedAt: new Date() })
+        .where(eq(schema.notebooks.id, nb.id))
+        .run();
+    }
   }
 }
 
