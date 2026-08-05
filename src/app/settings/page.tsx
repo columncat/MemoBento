@@ -107,14 +107,15 @@ export default async function SettingsPage() {
         </p>
       </section>
 
-      {/* 휴지통 */}
-      <TrashPanel retentionDays={RETENTION_DAYS} />
-
       {/* 표시 설정 */}
       <PreferencesPanel />
 
       {/* 백업 / 복원 */}
       <SettingsIO />
+
+      {/* 휴지통은 맨 아래 — 지운 것이 쌓이면 길이가 얼마든지 늘어나므로,
+          위에 두면 그 아래 설정들이 화면 밖으로 밀려난다. */}
+      <TrashPanel retentionDays={RETENTION_DAYS} />
     </main>
   );
 }
