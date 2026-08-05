@@ -26,6 +26,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "@/lib/client-api";
+
+import { AgentChat } from "./agent-chat";
 import { startDownload } from "@/lib/download";
 import { registerDecryptWorker, useSwReady } from "@/lib/sw-client";
 import {
@@ -432,6 +434,7 @@ export function Dashboard({
               </span>
             )}
           </button>
+          <AgentChat />
           <MailBentoLink href={mailbentoUrl} />
           <Link
             href="/settings"

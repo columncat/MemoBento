@@ -80,6 +80,7 @@ npm run check:recurrence     # 반복 일정 로직 검증
 | `AUTH_SECRET` | (없음) | 세션 쿠키 암호화 키 (32바이트 base64) |
 | `MAILBENTO_DB_PATH` | (없음) | MailBento 연동 (아래 참고) |
 | `MAILBENTO_URL` | (없음) | 헤더의 MailBento 버튼 주소. 비우면 자동 유추 |
+| `AGENT_URL` · `AGENT_TOKEN` | (없음) | 에이전트 채팅 (아래 참고) |
 
 자세한 설명은 [`.env.example`](.env.example) 에 있습니다.
 
@@ -134,6 +135,19 @@ cd mcp && npm install && npm run build
 ```
 
 자세한 것은 [mcp/README.md](mcp/README.md) 를 보세요.
+
+## 에이전트와 대화 (선택)
+
+[BentoAgent](https://github.com/columncat/BentoAgent) 를 띄워 두면 우상단에 **대화**
+버튼이 생깁니다. Discord 에서 하던 대화와 **같은 대화**라 창구를 옮겨도 맥락이 이어집니다.
+
+```bash
+AGENT_URL=http://127.0.0.1:4000
+AGENT_TOKEN=…
+```
+
+둘 다 채워야 버튼이 뜹니다. 브라우저가 에이전트를 직접 부르지 않고 이 앱이 서버에서
+프록시하므로 토큰은 화면에 실리지 않고, 이미 있는 로그인이 그대로 경계가 됩니다.
 
 ## 문서
 
