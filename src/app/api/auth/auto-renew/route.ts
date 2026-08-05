@@ -1,3 +1,4 @@
+import { safePath } from "@/lib/redirect";
 import { cookies, headers } from "next/headers";
 import { type NextRequest } from "next/server";
 
@@ -53,6 +54,6 @@ export async function GET(req: NextRequest) {
   );
 
   const to = req.nextUrl.searchParams.get("to") || "/";
-  const safeTo = to.startsWith("/") && !to.startsWith("//") ? to : "/";
+  const safeTo = safePath(to);
   return redirectTo(safeTo);
 }
