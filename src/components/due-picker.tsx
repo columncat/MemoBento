@@ -64,14 +64,23 @@ export function DuePicker({
   );
 }
 
-function DuePanel({
+/**
+ * 기한 고르는 패널만 따로.
+ *
+ * 위의 DuePicker 는 입력칸 옆 큼직한 타일용이다. 체크리스트 한 줄처럼 자리가
+ * 없는 곳에서는 각자 작은 버튼을 두고 이 패널만 띄운다.
+ */
+export function DuePanel({
   value,
   onPick,
   onCancel,
+  align = "left",
 }: {
   value: number | null;
   onPick: (dueAt: number | null) => void;
   onCancel: () => void;
+  /** 붙일 쪽. 오른쪽 끝 버튼에 달면 left 로 두면 화면 밖으로 나간다. */
+  align?: "left" | "right";
 }) {
   const boxRef = useRef<HTMLDivElement | null>(null);
   const [date, setDate] = useState(() => toDateInput(value));
@@ -110,7 +119,10 @@ function DuePanel({
     <div
       ref={boxRef}
       onPointerDown={(e) => e.stopPropagation()}
-      className="absolute bottom-full left-0 z-40 mb-1 w-64 rounded-xl border border-(--color-border) bg-(--color-surface) p-3 shadow-xl"
+      className={cn(
+        "absolute bottom-full z-40 mb-1 w-64 rounded-xl border border-(--color-border) bg-(--color-surface) p-3 shadow-xl",
+        align === "right" ? "right-0" : "left-0",
+      )}
     >
       <div className="flex flex-col gap-2.5 text-[12px] text-(--color-fg-2)">
         {/* 달력 */}

@@ -3,6 +3,8 @@
 import {
   CalendarClock,
   Check,
+  Eye,
+  EyeOff,
   LayoutGrid,
   List,
   ListChecks,
@@ -68,6 +70,8 @@ export interface NotebookHandlers {
   rename: (notebookId: string, name: string) => void;
   remove: (notebookId: string) => void;
   expand: (notebook: NotebookDTO) => void;
+  /** 접어 두기 토글. 화면에서만 가리는 것이고 접근을 막지는 않는다. */
+  setHidden: (notebook: NotebookDTO, hidden: boolean) => Promise<void>;
 }
 
 interface Props {
@@ -144,12 +148,17 @@ export function NotebookCard({
   const [dragging, setDragging] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [editingName, setEditingName] = useState(false);
+  // 접어 둔 메모함을 이번에만 펼쳐 본 상태. 서버에 저장하지 않는다 —
+  // 새로고침하면 다시 접힌다. 어깨너머로 안 보이게 하려는 것이 목적이라
+  // 한 번 본 것이 계속 열려 있으면 의미가 없다.
+  const [revealed, setRevealed] = useState(false);
 
   const [draftName, setDraftName] = useState(notebook.name);
   const dragDepth = useRef(0);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const locked = !!notebook.systemKey;
+  const covered = notebook.hidden && !revealed;
   const canLink = notebook.accepts.includes("link");
   const canText = notebook.accepts.includes("text");
   const canFiles = acceptsFiles(notebook);
@@ -416,6 +425,28 @@ export function NotebookCard({
             </button>
           )}
 
+          <button
+            type="button"
+            onClick={() => {
+              const next = !notebook.hidden;
+              setRevealed(false);
+              void handlers.setHidden(notebook, next);
+            }}
+            className={iconBtn}
+            aria-label={notebook.hidden ? "접기 해제" : "접어 두기"}
+            title={
+              notebook.hidden
+                ? "접기 해제 — 늘 펼쳐 둡니다"
+                : "접어 두기 — 목록 맨 뒤로 가고 내용이 가려집니다 (보안 기능은 아닙니다)"
+            }
+          >
+            {notebook.hidden ? (
+              <Eye className="h-3.5 w-3.5" />
+            ) : (
+              <EyeOff className="h-3.5 w-3.5" />
+            )}
+          </button>
+
           {!flush && (
             <button
               type="button"
@@ -445,8 +476,29 @@ export function NotebookCard({
         </div>
       </header>
 
+      {/*
+        접어 둔 메모함 — 내용 대신 덮개를 씌운다.
+
+        서버는 메모를 그대로 내려보낸다. 화면에서만 가리는 것이고 개발자도구를
+        열면 다 보인다. 어깨너머로 안 보이게 하려는 장치이지 접근 제어가 아니다.
+      */}
+      {covered && (
+        <button
+          type="button"
+          onClick={() => setRevealed(true)}
+          className="flex min-h-0 flex-1 cursor-pointer flex-col items-center justify-center gap-2 px-4 text-(--color-fg-4) transition hover:bg-(--color-surface-hi) hover:text-(--color-fg-3)"
+          aria-label={`${notebook.name} 표시하기`}
+        >
+          <Eye className="h-5 w-5" aria-hidden />
+          <span className="text-sm font-medium">표시하기</span>
+          <span className="text-[11px] break-keep">
+            메모 {notebook.memos.length}개 · 눌러서 이번만 펼치기
+          </span>
+        </button>
+      )}
+
       {/* 입력 — 텍스트면 텍스트 메모, URL 이면 링크 메모 */}
-      {composer && (
+      {!covered && composer && (
       <form
         onSubmit={(e) => {
           e.preventDefault();
@@ -512,6 +564,7 @@ export function NotebookCard({
       )}
 
       {/* 본문 */}
+      {!covered && (
       <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto px-4 py-3">
         <MemoList
           memos={notebook.memos}
@@ -534,6 +587,7 @@ export function NotebookCard({
           }
         />
       </div>
+      )}
 
       {/* 드래그 오버레이 */}
       {dragging && (

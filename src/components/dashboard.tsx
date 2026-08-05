@@ -280,6 +280,11 @@ export function Dashboard({
         void run(() => api.deleteNotebook(id)).catch(() => undefined);
       },
       expand: (nb) => setExpandedId(nb.id),
+      setHidden: async (nb, hidden) => {
+        await run(() => api.updateNotebook(nb.id, { hidden })).catch(
+          () => undefined,
+        );
+      },
       editRules: (nb, focusMemoId) =>
         setRulesFor({ notebookId: nb.id, focusMemoId }),
     }),

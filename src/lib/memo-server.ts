@@ -45,9 +45,19 @@ export const SYSTEM_NOTEBOOKS: {
   systemKey: SystemKey;
   name: string;
   position: number;
+  kind: NotebookKind;
+  /** 처음 만들 때 접어 둘지. 이후에는 사용자가 정한다. */
+  hidden?: boolean;
 }[] = [
-  { id: "sys-corkboard", systemKey: "corkboard", name: "Corkboard", position: 0 },
-  { id: "sys-memo", systemKey: "memo", name: "Memo", position: 1 },
+  { id: "sys-corkboard", systemKey: "corkboard", name: "Corkboard", position: 0, kind: "memo" },
+  { id: "sys-memo", systemKey: "memo", name: "Memo", position: 1, kind: "memo" },
+  /**
+   * 에이전트가 쓰라고 미리 만들어 두는 자리. MailBento 와 무관하게 이 앱의
+   * DB 에 그대로 산다. 사람이 늘 보고 싶은 것은 아니라서 접어 둔 채로 만든다 —
+   * 접기는 언제든 풀 수 있다.
+   */
+  { id: "sys-agent-memory", systemKey: "agent-memory", name: "Memory for Agents", position: 900, kind: "memo", hidden: true },
+  { id: "sys-agent-schedule", systemKey: "agent-schedule", name: "Schedule for Agents", position: 901, kind: "todo", hidden: true },
 ];
 
 /**
@@ -61,6 +71,7 @@ export function acceptedTypes(
   systemKey: SystemKey | null,
   kind: NotebookKind = "memo",
 ): MemoType[] {
+  // MailBento 자료구조를 쓰는 둘만 제한된다. agent-* 는 평범한 메모함이다.
   if (systemKey === "corkboard") return ["link"];
   if (systemKey === "memo") return ["text"];
   // 체크리스트·TODO 는 한 줄짜리 항목만 담는다 (파일·링크는 받지 않음)
@@ -116,8 +127,10 @@ export function ensureSystemNotebooks(): void {
         id: nb.id,
         name: nb.name,
         systemKey: nb.systemKey,
+        kind: nb.kind,
         viewMode: "list",
         position: nb.position,
+        hidden: nb.hidden ? 1 : 0,
       })
       .onConflictDoNothing()
       .run();
@@ -130,7 +143,12 @@ export function listNotebooks(): NotebookDTO[] {
   const rows = db
     .select()
     .from(schema.notebooks)
-    .orderBy(asc(schema.notebooks.position), asc(schema.notebooks.createdAt))
+    // 접어 둔 메모함은 순서와 무관하게 늘 맨 뒤로 간다
+    .orderBy(
+      asc(schema.notebooks.hidden),
+      asc(schema.notebooks.position),
+      asc(schema.notebooks.createdAt),
+    )
     .all();
 
   const legacy = getLegacyState();
@@ -149,6 +167,7 @@ export function listNotebooks(): NotebookDTO[] {
       id: nb.id,
       name: nb.name,
       systemKey: nb.systemKey ?? null,
+      hidden: nb.hidden === 1,
       viewMode: nb.viewMode,
       position: nb.position,
       kind: nb.kind,
@@ -300,12 +319,12 @@ export class NotebookLockedError extends Error {
 
 export function updateNotebook(
   id: string,
-  patch: { name?: string; viewMode?: ViewMode },
+  patch: { name?: string; viewMode?: ViewMode; hidden?: boolean },
 ): void {
   const nb = getNotebook(id);
   if (!nb) throw new Error("메모함을 찾을 수 없습니다");
 
-  // 시스템 메모함은 보기 방식만 바꿀 수 있다 (이름은 잠김).
+  // 시스템 메모함은 이름만 잠긴다. 보기 방식과 접기는 바꿀 수 있다.
   if (patch.name !== undefined && nb.systemKey) throw new NotebookLockedError();
 
   const set: Record<string, unknown> = { updatedAt: new Date() };
@@ -315,6 +334,20 @@ export function updateNotebook(
     set.name = name;
   }
   if (patch.viewMode !== undefined) set.viewMode = patch.viewMode;
+  if (patch.hidden !== undefined) {
+    set.hidden = patch.hidden ? 1 : 0;
+    if (patch.hidden) {
+      // 접으면 맨 뒤로 보낸다. 나중에 펼쳤을 때 목록 한가운데로 튀어나오지
+      // 않고 뒤쪽에 그대로 남아 있게.
+      const max = db
+        .select({ p: schema.notebooks.position })
+        .from(schema.notebooks)
+        .orderBy(desc(schema.notebooks.position))
+        .limit(1)
+        .get();
+      set.position = (max?.p ?? 0) + 1;
+    }
+  }
 
   db.update(schema.notebooks)
     .set(set)

@@ -1,17 +1,17 @@
 "use client";
 
 import { CalendarDays, CalendarOff, Check, Trash2 } from "lucide-react";
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 import {
   formatDue,
   isOverdue,
-  toDateInput,
   type MemoDTO,
   type NotebookKind,
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
+import { DuePanel } from "./due-picker";
 import { DragHandle, type MemoActions } from "./memo-item";
 
 const ctlBtn =
@@ -51,7 +51,7 @@ export function ChecklistRow({
 }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(memo.text ?? "");
-  const dateRef = useRef<HTMLInputElement | null>(null);
+  const [duePickerOpen, setDuePickerOpen] = useState(false);
   const overdue = isOverdue(memo.dueAt, memo.done);
 
   const commit = () => {
@@ -158,11 +158,7 @@ export function ChecklistRow({
                 type="button"
                 onClick={(e) => {
                   e.stopPropagation();
-                  // showPicker 를 지원하면 달력을 바로 띄운다
-                  const el = dateRef.current;
-                  if (!el) return;
-                  if (typeof el.showPicker === "function") el.showPicker();
-                  else el.focus();
+                  setDuePickerOpen((v) => !v);
                 }}
                 className={ctlBtn}
                 aria-label={memo.dueAt ? "기한 변경" : "기한 지정"}
@@ -170,19 +166,21 @@ export function ChecklistRow({
               >
                 <CalendarDays className="h-3 w-3" />
               </button>
-              <input
-                ref={dateRef}
-                type="date"
-                value={toDateInput(memo.dueAt)}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  actions.onDue(memo, v ? new Date(v + "T12:00:00").getTime() : null);
-                }}
-                className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
-                tabIndex={-1}
-                aria-label="기한"
-              />
+              {/*
+                `<input type="date">` 로는 시각을 정할 수 없다. 날짜만 필요한
+                항목이 많지만 "화요일 10시" 같은 것도 흔해서 같은 패널을 쓴다.
+              */}
+              {duePickerOpen && (
+                <DuePanel
+                  value={memo.dueAt}
+                  align="right"
+                  onCancel={() => setDuePickerOpen(false)}
+                  onPick={(next) => {
+                    actions.onDue(memo, next);
+                    setDuePickerOpen(false);
+                  }}
+                />
+              )}
             </span>
           )}
 

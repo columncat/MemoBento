@@ -30,7 +30,10 @@ export const api = {
   createNotebook: (name: string, kind: NotebookKind = "memo") =>
     mutate("/api/notebooks", jsonInit("POST", { name, kind })),
 
-  updateNotebook: (id: string, patch: { name?: string; viewMode?: ViewMode }) =>
+  updateNotebook: (
+    id: string,
+    patch: { name?: string; viewMode?: ViewMode; hidden?: boolean },
+  ) =>
     mutate(`/api/notebooks/${encodeURIComponent(id)}`, jsonInit("PATCH", patch)),
 
   deleteNotebook: (id: string) =>

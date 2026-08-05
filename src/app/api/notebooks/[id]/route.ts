@@ -14,6 +14,8 @@ export const dynamic = "force-dynamic";
 const patchSchema = z.object({
   name: z.string().trim().min(1).max(60).optional(),
   viewMode: z.enum(VIEW_MODES).optional(),
+  /** 접기 — 화면에서만 가린다. 서버는 내용을 그대로 내려보낸다. */
+  hidden: z.boolean().optional(),
 });
 
 export async function PATCH(

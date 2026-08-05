@@ -30,6 +30,7 @@ export interface Notebook {
   systemKey: string | null;
   viewMode: string;
   position: number;
+  hidden: boolean;
   accepts: string[];
   memos: Memo[];
 }
@@ -91,6 +92,8 @@ export function shapeNotebook(
     position: nb.position,
     accepts: nb.accepts,
     memoCount: nb.memos.length,
+    // 접어 둔 메모함. 화면에서만 가려지고 내용은 그대로 읽힌다.
+    hidden: nb.hidden,
     // 값이 있으면 이름 변경·삭제가 잠긴 메모함이다
     systemKey: nb.systemKey,
     memos: memos ? nb.memos.map((m) => shapeMemo(m, textLimit)) : undefined,

@@ -65,6 +65,11 @@ export interface NotebookDTO {
   systemKey: SystemKey | null;
   viewMode: ViewMode;
   position: number;
+  /**
+   * 접어 둠 — 목록 맨 뒤로 가고 내용 대신 "표시하기" 만 보인다.
+   * 화면에서만 가리는 것이고 서버는 내용을 그대로 내려보낸다.
+   */
+  hidden: boolean;
   /** 메모함 종류 — 일반 메모 / 체크리스트 / TODO. */
   kind: NotebookKind;
   /**

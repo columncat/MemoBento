@@ -10,7 +10,19 @@ export type ViewMode = (typeof VIEW_MODES)[number];
  * 이 메모함들은 이름/삭제가 잠겨 있고, 내용은 MailBento 의 widget_state
  * (Corkboard 핀 / Memo 노트) 와 직접 동기화된다.
  */
-export const SYSTEM_KEYS = ["corkboard", "memo"] as const;
+/**
+ * 시스템 예약 메모함 키.
+ *
+ * corkboard / memo 는 MailBento 의 widget_state 에 산다. agent-* 는 MemoBento
+ * 자체 DB 에 살고, 에이전트가 쓰라고 미리 만들어 두는 자리일 뿐이다.
+ * 어느 쪽이든 이름 변경과 삭제는 잠긴다.
+ */
+export const SYSTEM_KEYS = [
+  "corkboard",
+  "memo",
+  "agent-memory",
+  "agent-schedule",
+] as const;
 export type SystemKey = (typeof SYSTEM_KEYS)[number];
 
 /** 메모 종류. text/link 는 MailBento Memo/Corkboard 포맷과 1:1 대응. */
@@ -58,6 +70,13 @@ export const notebooks = sqliteTable("notebooks", {
   viewMode: text("view_mode", { enum: VIEW_MODES }).notNull().default("list"),
   /** 대시보드 그리드 위치 (낮은 숫자가 앞). */
   position: integer("position").notNull().default(0),
+  /**
+   * 1 = 접어 둠. 목록 맨 뒤로 가고 내용 대신 "표시하기" 만 보인다.
+   *
+   * **보안 장치가 아니다.** 서버는 내용을 그대로 내려보내고 화면에서만 가린다.
+   * 어깨너머로 보이지 않게 하려는 것이지 접근을 막는 것이 아니다.
+   */
+  hidden: integer("hidden").notNull().default(0),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()
     .default(sql`(unixepoch())`),

@@ -181,23 +181,35 @@ server.registerTool(
   {
     title: "메모함 고치기",
     description:
-      "이름과 보기 방식을 바꾼다. 시스템 메모함(Corkboard/Memo)은 이름이 잠겨 있어 403 이 난다.",
+      "이름·보기 방식·접기를 바꾼다. 시스템 메모함(Corkboard / Memo / " +
+      "Memory for Agents / Schedule for Agents)은 이름이 잠겨 있어 403 이 난다. " +
+      "접기는 시스템 메모함에서도 바꿀 수 있다.",
     inputSchema: {
       notebook: z.string().describe("메모함 id 또는 정확한 이름"),
       name: z.string().trim().min(1).max(60).optional(),
       viewMode: z.enum(VIEW_MODES).optional(),
+      hidden: z
+        .boolean()
+        .optional()
+        .describe(
+          "접어 두기. 목록 맨 뒤로 가고 화면에서 내용이 가려진다 — 보안 기능이 아니고 내용은 그대로 읽힌다",
+        ),
     },
   },
-  async ({ notebook, name, viewMode }) => {
+  async ({ notebook, name, viewMode, hidden }) => {
     try {
-      if (name === undefined && viewMode === undefined) {
-        throw new Error("name 이나 viewMode 중 하나는 주어야 합니다");
+      if (name === undefined && viewMode === undefined && hidden === undefined) {
+        throw new Error("name · viewMode · hidden 중 하나는 주어야 합니다");
       }
       const target = resolveNotebook(await list(), notebook);
       const res = await client.send<NotebooksResponse>(
         "PATCH",
         `/api/notebooks/${encodeURIComponent(target.id)}`,
-        { ...(name !== undefined ? { name } : {}), ...(viewMode ? { viewMode } : {}) },
+        {
+          ...(name !== undefined ? { name } : {}),
+          ...(viewMode ? { viewMode } : {}),
+          ...(hidden !== undefined ? { hidden } : {}),
+        },
       );
       const after = res.notebooks.find((n) => n.id === target.id);
       return ok({ updated: after ? shapeNotebook(after, { memos: false }) : null });
