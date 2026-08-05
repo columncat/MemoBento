@@ -104,6 +104,29 @@ MAILBENTO_DB_PATH=/app/mailbento/mailbento.db
 > 두 앱이 같은 행을 통째로 쓰기 때문에 양쪽을 동시에 열어 두고 편집하면
 > 나중에 저장한 쪽이 이깁니다. 켜기 전에 MailBento DB 를 백업해 두세요.
 
+## 에이전트 연동 (MCP)
+
+메모함·메모를 에이전트가 읽고 고칠 수 있게 하는 MCP 서버가 [`mcp/`](mcp/) 에 있습니다.
+같은 호스트·같은 내부망·SSH 어느 쪽에서든 붙습니다.
+
+```bash
+cd mcp && npm install && npm run build
+```
+
+```json
+{
+  "mcpServers": {
+    "memobento": {
+      "command": "node",
+      "args": ["/path/to/MemoBento/mcp/dist/index.js"],
+      "env": { "MEMOBENTO_URL": "http://127.0.0.1:3001", "MEMOBENTO_PASSWORD": "…" }
+    }
+  }
+}
+```
+
+자세한 것은 [mcp/README.md](mcp/README.md) 를 보세요.
+
 ## 문서
 
 코드를 고칠 계획이라면 [HANDOFF.md](HANDOFF.md) 에 설계 배경과 주의점이 정리되어 있습니다.
