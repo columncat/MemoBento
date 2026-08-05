@@ -1,3 +1,4 @@
+import { logAgent } from "@/lib/agent-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -28,6 +29,7 @@ export async function PATCH(
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid body" }, { status: 400 });
   }
+  const before = listNotebooks().find((n) => n.id === id);
   try {
     updateNotebook(id, parsed.data);
   } catch (e) {
@@ -36,14 +38,16 @@ export async function PATCH(
       { status: e instanceof NotebookLockedError ? 403 : 400 },
     );
   }
+  logAgent(req, "메모함 고치기", before?.name ?? id, parsed.data);
   return NextResponse.json({ notebooks: listNotebooks() });
 }
 
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const target = listNotebooks().find((n) => n.id === id);
   try {
     deleteNotebook(id);
   } catch (e) {
@@ -52,5 +56,8 @@ export async function DELETE(
       { status: e instanceof NotebookLockedError ? 403 : 400 },
     );
   }
+  logAgent(req, "메모함 지우기 (휴지통)", target?.name ?? id, {
+    memos: target?.memos.length ?? 0,
+  });
   return NextResponse.json({ notebooks: listNotebooks() });
 }

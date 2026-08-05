@@ -1,3 +1,4 @@
+import { logAgent } from "@/lib/agent-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -23,5 +24,6 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  logAgent(req, "메모 순서 바꾸기", null, { count: parsed.data.orderedIds.length });
   return NextResponse.json({ notebooks: listNotebooks() });
 }

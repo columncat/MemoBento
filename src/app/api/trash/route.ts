@@ -1,3 +1,4 @@
+import { logAgent } from "@/lib/agent-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -20,6 +21,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid body" }, { status: 400 });
   }
+  const label = listTrash().find((x) => x.id === parsed.data.id)?.label ?? parsed.data.id;
   try {
     if (parsed.data.action === "restore") {
       restoreFromTrash(parsed.data.id);
@@ -32,5 +34,10 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+  logAgent(
+    req,
+    parsed.data.action === "restore" ? "휴지통에서 되살리기" : "영구 삭제",
+    label,
+  );
   return NextResponse.json({ trash: listTrash(), notebooks: listNotebooks() });
 }

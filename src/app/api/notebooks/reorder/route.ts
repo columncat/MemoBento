@@ -1,3 +1,4 @@
+import { logAgent } from "@/lib/agent-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -15,5 +16,6 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "invalid body" }, { status: 400 });
   }
   reorderNotebooks(parsed.data.orderedIds);
+  logAgent(req, "메모함 순서 바꾸기", null, { count: parsed.data.orderedIds.length });
   return NextResponse.json({ notebooks: listNotebooks() });
 }

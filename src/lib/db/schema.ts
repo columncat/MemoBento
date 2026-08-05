@@ -60,6 +60,33 @@ export type FileKind = (typeof FILE_KINDS)[number];
 export const NOTEBOOK_KINDS = ["memo", "checklist", "todo", "schedule"] as const;
 export type NotebookKind = (typeof NOTEBOOK_KINDS)[number];
 
+/**
+ * 에이전트가 무엇을 했는지 남기는 기록.
+ *
+ * MCP 로 들어온 **변경**만 적는다. 사람이 화면에서 한 일은 화면에 이미 보이지만,
+ * 에이전트가 한 일은 결과만 남고 누가 했는지가 사라진다 — 메모가 왜 바뀌었는지
+ * 나중에 되짚을 수 있어야 한다.
+ *
+ * 읽기는 남기지 않는다. 목록 한 번 부를 때마다 줄이 쌓이면 정작 봐야 할 변경이
+ * 묻힌다.
+ */
+export const agentLog = sqliteTable("agent_log", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  at: integer("at", { mode: "timestamp" })
+    .notNull()
+    .default(sql`(unixepoch())`),
+  /** 어느 클라이언트가 했는지. MCP 가 헤더로 알려 준다. */
+  actor: text("actor").notNull().default("agent"),
+  /** "메모함 만들기" 처럼 사람이 읽는 한 줄. */
+  action: text("action").notNull(),
+  /** 무엇에 했는지 — 메모함/메모 이름. 지워졌어도 남게 이름을 그대로 뜬다. */
+  target: text("target"),
+  /** 더 볼 것이 있으면. JSON 문자열. */
+  detail: text("detail"),
+});
+
+export type AgentLogRow = typeof agentLog.$inferSelect;
+
 export const notebooks = sqliteTable("notebooks", {
   /** uid 문자열. 시스템 메모함은 "sys-corkboard" / "sys-memo" 고정. */
   id: text("id").primaryKey(),

@@ -1,4 +1,4 @@
-import { ArrowLeft, Clock, Database, LogOut, Link2 } from "lucide-react";
+import { ArrowLeft, ChevronRight, Clock, Database, Link2, LogOut } from "lucide-react";
 import Link from "next/link";
 
 import { isAuthEnabled } from "@/lib/auth";
@@ -8,7 +8,6 @@ import { RETENTION_DAYS } from "@/lib/trash";
 
 import { PreferencesPanel } from "./preferences-panel";
 import { SettingsIO } from "./settings-io";
-import { TrashPanel } from "./trash-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -113,10 +112,54 @@ export default async function SettingsPage() {
       {/* 백업 / 복원 */}
       <SettingsIO />
 
-      {/* 휴지통은 맨 아래 — 지운 것이 쌓이면 길이가 얼마든지 늘어나므로,
-          위에 두면 그 아래 설정들이 화면 밖으로 밀려난다. */}
-      <TrashPanel retentionDays={RETENTION_DAYS} />
+      {/*
+        휴지통과 에이전트 기록은 한 단계 들어가서 본다.
+
+        둘 다 항목이 얼마든지 쌓이는 목록이라, 여기 펼쳐 두면 설정 페이지가
+        끝없이 길어진다. 자주 보는 것도 아니다.
+      */}
+      <section className="rounded-[var(--radius-card)] bg-(--color-surface) p-6 ring-1 ring-(--color-border-soft)">
+        <h2 className="mb-1 text-lg font-medium text-(--color-fg)">기록</h2>
+        <p className="mb-4 text-sm text-(--color-fg-4)">
+          지운 것과, 에이전트가 고친 것.
+        </p>
+        <div className="flex flex-col gap-2">
+          <SubPageLink
+            href="/settings/trash"
+            title="휴지통"
+            desc={`지운 메모함·메모를 ${RETENTION_DAYS}일간 보관합니다`}
+          />
+          <SubPageLink
+            href="/settings/agent-log"
+            title="에이전트 기록"
+            desc="MCP 로 연결된 에이전트가 무엇을 고쳤는지"
+          />
+        </div>
+      </section>
     </main>
+  );
+}
+
+function SubPageLink({
+  href,
+  title,
+  desc,
+}: {
+  href: string;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <Link
+      href={href}
+      className="flex items-center justify-between gap-3 rounded-lg bg-(--color-bg-2) px-4 py-3 ring-1 ring-(--color-border-soft) transition hover:bg-(--color-surface-hi)"
+    >
+      <span className="min-w-0">
+        <span className="block text-sm text-(--color-fg)">{title}</span>
+        <span className="block text-[12px] break-keep text-(--color-fg-4)">{desc}</span>
+      </span>
+      <ChevronRight className="h-4 w-4 shrink-0 text-(--color-fg-4)" />
+    </Link>
   );
 }
 

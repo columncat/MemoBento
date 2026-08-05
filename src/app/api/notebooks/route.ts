@@ -1,3 +1,4 @@
+import { logAgent } from "@/lib/agent-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -25,5 +26,6 @@ export async function POST(req: Request) {
     );
   }
   createNotebook(parsed.data.name, parsed.data.kind);
+  logAgent(req, "메모함 만들기", parsed.data.name, { kind: parsed.data.kind });
   return NextResponse.json({ notebooks: listNotebooks() });
 }

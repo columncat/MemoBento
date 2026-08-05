@@ -1,3 +1,4 @@
+import { logAgent } from "@/lib/agent-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -49,6 +50,7 @@ export async function PATCH(
     }
   }
 
+  const beforeLabel = memoLabelOf(id);
   try {
     updateMemo(id, patch);
   } catch (e) {
@@ -57,14 +59,28 @@ export async function PATCH(
       { status: 400 },
     );
   }
+  logAgent(req, "메모 고치기", beforeLabel, patch);
   return NextResponse.json({ notebooks: listNotebooks() });
 }
 
+/** 기록에 쓸 사람이 읽는 이름. 지운 뒤에도 남게 미리 뜬다. */
+function memoLabelOf(id: string): string {
+  for (const nb of listNotebooks()) {
+    const m = nb.memos.find((x) => x.id === id);
+    if (m) {
+      const label = m.title ?? m.text ?? m.url ?? m.file?.name ?? id;
+      return `${nb.name} / ${label.slice(0, 80)}`;
+    }
+  }
+  return id;
+}
+
 export async function DELETE(
-  _req: Request,
+  req: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
+  const label = memoLabelOf(id);
   try {
     deleteMemo(id);
   } catch (e) {
@@ -73,5 +89,6 @@ export async function DELETE(
       { status: 400 },
     );
   }
+  logAgent(req, "메모 지우기 (휴지통)", label);
   return NextResponse.json({ notebooks: listNotebooks() });
 }

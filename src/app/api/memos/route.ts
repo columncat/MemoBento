@@ -1,3 +1,4 @@
+import { logAgent } from "@/lib/agent-log";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
@@ -63,5 +64,14 @@ export async function POST(req: Request) {
     );
   }
 
-  return NextResponse.json({ notebooks: listNotebooks() });
+  const nbs = listNotebooks();
+  logAgent(
+    req,
+    "메모 추가",
+    nbs.find((n) => n.id === input.notebookId)?.name ?? input.notebookId,
+    input.type === "text"
+      ? { type: "text", text: input.text.slice(0, 200) }
+      : { type: "link", url: input.url },
+  );
+  return NextResponse.json({ notebooks: nbs });
 }

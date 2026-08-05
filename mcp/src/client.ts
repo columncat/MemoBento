@@ -83,6 +83,10 @@ export class MemoBentoClient {
         redirect: "manual",
         headers: {
           accept: "application/json",
+          // 앱이 "사람이 아닌 것이 불렀다" 를 알아 활동 기록에 남긴다.
+          // 감사 로그가 아니라 기록이다 — 위조를 막는 것이 목적이 아니라,
+          // 나중에 "이 메모 왜 바뀌었지" 를 되짚을 수 있게 하는 것이다.
+          "x-mb-agent": process.env.MEMOBENTO_AGENT_NAME || "MCP",
           ...(body === undefined ? {} : { "content-type": "application/json" }),
           ...(this.cookieHeader() ? { cookie: this.cookieHeader()! } : {}),
         },

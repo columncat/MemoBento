@@ -50,6 +50,13 @@
       "when": 1785896973626,
       "tag": "0006_simple_namora",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1785914296694,
+      "tag": "0007_chunky_living_lightning",
+      "breakpoints": true
     }
   ]
 }
