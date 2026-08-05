@@ -67,9 +67,10 @@ export function MemoList({
 
   // 체크리스트·TODO 는 보기 방식과 무관하게 얇은 한 줄로 그린다
   if (kind === "checklist" || kind === "todo") {
+    const rows = sortChecklist(memos, kind);
     return (
       <ul className="flex flex-col">
-        {memos.map((m) => (
+        {rows.map((m) => (
           <ChecklistItem
             key={m.id}
             memo={m}
@@ -398,4 +399,30 @@ function ScheduleItem({
       }}
     />
   );
+}
+
+/**
+ * 체크리스트·TODO 줄 세우기.
+ *
+ * 1. 완료한 항목은 아래로 내린다. 남은 일이 늘 위에 모여 보이게.
+ * 2. TODO 는 그 안에서 기한이 가까운 것부터. 기한 없는 항목은 뒤로.
+ * 3. 나머지는 원래 순서(position)를 지킨다 — 끌어서 바꾼 순서가 기한 없는
+ *    항목들 사이에서는 그대로 살아 있어야 한다. 기한이 있는 항목은 끌어도
+ *    자리가 기한대로 되돌아온다.
+ */
+function sortChecklist(memos: MemoDTO[], kind: NotebookKind): MemoDTO[] {
+  return memos
+    .map((m, i) => ({ m, i }))
+    .sort((a, b) => {
+      const doneA = a.m.done ? 1 : 0;
+      const doneB = b.m.done ? 1 : 0;
+      if (doneA !== doneB) return doneA - doneB;
+      if (kind === "todo") {
+        const da = a.m.dueAt ?? Infinity;
+        const db = b.m.dueAt ?? Infinity;
+        if (da !== db) return da - db;
+      }
+      return a.i - b.i;
+    })
+    .map((x) => x.m);
 }

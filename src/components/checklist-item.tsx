@@ -1,6 +1,6 @@
 "use client";
 
-import { CalendarDays, Check, Trash2 } from "lucide-react";
+import { CalendarDays, CalendarOff, Check, Trash2 } from "lucide-react";
 import { useRef, useState } from "react";
 
 import {
@@ -13,6 +13,9 @@ import {
 import { cn } from "@/lib/utils";
 
 import { DragHandle, type MemoActions } from "./memo-item";
+
+const ctlBtn =
+  "grid h-5 w-5 place-items-center rounded text-(--color-fg-4) transition hover:bg-(--color-bg-2) hover:text-(--color-fg-2)";
 
 export interface ChecklistActions {
   /** 완료 토글. */
@@ -62,7 +65,7 @@ export function ChecklistRow({
     <li
       {...dnd}
       className={cn(
-        "group flex items-center gap-1.5 rounded-md px-2 py-1.5 transition hover:bg-(--color-surface-hi)",
+        "group relative flex items-center gap-1.5 rounded-md px-2 py-1.5 transition hover:bg-(--color-surface-hi)",
         memo.done && "opacity-60",
       )}
     >
@@ -124,74 +127,95 @@ export function ChecklistRow({
         </span>
       )}
 
-      {/* 기한 (TODO 전용) */}
-      {kind === "todo" && (
-        <div className="relative shrink-0">
+      {/* 기한 라벨 — 자리를 차지한다. 마우스를 올리면 이 자리에 컨트롤이 뜬다. */}
+      {kind === "todo" && memo.dueAt && (
+        <span
+          className={cn(
+            "flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[11px] group-hover:invisible",
+            overdue
+              ? "bg-(--color-danger)/15 text-(--color-danger)"
+              : "bg-(--color-bg-2) text-(--color-fg-3)",
+          )}
+        >
+          <CalendarDays className="h-3 w-3" />
+          {formatDue(memo.dueAt)}
+        </span>
+      )}
+
+      {/*
+        컨트롤은 흐름 밖에 둔다. 숨어 있을 때 자리를 먹지 않아야 본문이 줄 끝까지
+        쓴다 — 예전에는 라벨과 버튼 둘이 늘 자리를 차지해 한 줄짜리 항목에서
+        본문이 그만큼 잘렸다. 배경을 줄 호버 색과 같게 맞춰 글자 위에 겹쳐도
+        읽히지 않게 한다.
+
+        고치는 중에는 띄우지 않는다. 입력칸 오른쪽 끝을 가린다.
+      */}
+      {!editing && (
+        <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5 rounded-md bg-(--color-surface-hi) pl-1.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+          {kind === "todo" && (
+            <span className="relative">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  // showPicker 를 지원하면 달력을 바로 띄운다
+                  const el = dateRef.current;
+                  if (!el) return;
+                  if (typeof el.showPicker === "function") el.showPicker();
+                  else el.focus();
+                }}
+                className={ctlBtn}
+                aria-label={memo.dueAt ? "기한 변경" : "기한 지정"}
+                title={memo.dueAt ? "기한 변경" : "기한 지정"}
+              >
+                <CalendarDays className="h-3 w-3" />
+              </button>
+              <input
+                ref={dateRef}
+                type="date"
+                value={toDateInput(memo.dueAt)}
+                onClick={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  actions.onDue(memo, v ? new Date(v + "T12:00:00").getTime() : null);
+                }}
+                className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
+                tabIndex={-1}
+                aria-label="기한"
+              />
+            </span>
+          )}
+
+          {kind === "todo" && memo.dueAt && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                actions.onDue(memo, null);
+              }}
+              className={ctlBtn}
+              aria-label="기한 해제"
+              title="기한 해제"
+            >
+              <CalendarOff className="h-3 w-3" />
+            </button>
+          )}
+
           <button
             type="button"
             onClick={(e) => {
               e.stopPropagation();
-              // showPicker 를 지원하면 달력을 바로 띄운다
-              const el = dateRef.current;
-              if (!el) return;
-              if (typeof el.showPicker === "function") el.showPicker();
-              else el.focus();
+              memoActions.onDelete(memo);
             }}
-            className={cn(
-              "flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] transition",
-              memo.dueAt
-                ? overdue
-                  ? "bg-(--color-danger)/15 text-(--color-danger)"
-                  : "bg-(--color-bg-2) text-(--color-fg-3)"
-                : "text-(--color-fg-4) opacity-0 group-hover:opacity-100",
-            )}
-            title={memo.dueAt ? "기한 변경" : "기한 지정"}
+            className={cn(ctlBtn, "hover:bg-(--color-danger)/20 hover:text-(--color-danger)")}
+            aria-label="삭제"
+            title="삭제"
           >
-            <CalendarDays className="h-3 w-3" />
-            {memo.dueAt ? formatDue(memo.dueAt) : "기한"}
+            <Trash2 className="h-3 w-3" />
           </button>
-          <input
-            ref={dateRef}
-            type="date"
-            value={toDateInput(memo.dueAt)}
-            onClick={(e) => e.stopPropagation()}
-            onChange={(e) => {
-              const v = e.target.value;
-              actions.onDue(memo, v ? new Date(v + "T12:00:00").getTime() : null);
-            }}
-            className="pointer-events-none absolute inset-0 h-full w-full opacity-0"
-            tabIndex={-1}
-            aria-label="기한"
-          />
         </div>
       )}
 
-      {kind === "todo" && memo.dueAt && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            actions.onDue(memo, null);
-          }}
-          className="shrink-0 rounded px-1 text-[10px] text-(--color-fg-4) opacity-0 transition group-hover:opacity-100 hover:text-(--color-fg-2)"
-          title="기한 해제"
-        >
-          ✕
-        </button>
-      )}
-
-      <button
-        type="button"
-        onClick={(e) => {
-          e.stopPropagation();
-          memoActions.onDelete(memo);
-        }}
-        className="grid h-5 w-5 shrink-0 place-items-center rounded text-(--color-fg-4) opacity-0 transition group-hover:opacity-100 hover:bg-(--color-danger)/20 hover:text-(--color-danger)"
-        aria-label="삭제"
-        title="삭제"
-      >
-        <Trash2 className="h-3 w-3" />
-      </button>
     </li>
   );
 }

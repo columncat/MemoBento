@@ -1,5 +1,6 @@
 "use client";
 
+import { swReason } from "./sw-client";
 import { viewUrl, type FileDTO } from "./types";
 
 /**
@@ -29,7 +30,7 @@ export function downloadBlocker(
   if (file.encrypted && !swReady) {
     // 여기서 막지 않으면 암호문이 그대로 저장된다. 파일은 받아지는데 열리지
     // 않으므로 실패가 눈에 띄지 않는다 — 조용히 깨지는 쪽이 더 나쁘다.
-    return "복호화 준비 중입니다. 잠시 후 다시 눌러 주세요";
+    return swReason() ?? "복호화 준비 중입니다. 잠시 후 다시 눌러 주세요";
   }
   return null;
 }

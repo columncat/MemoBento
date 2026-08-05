@@ -1,20 +1,12 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import {
-  AlertCircle,
-  Download,
-  ExternalLink,
-  Loader2,
-  Save,
-  Trash2,
-  X,
-} from "lucide-react";
+import { AlertCircle, Download, ExternalLink, Loader2, Save, ShieldAlert, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { confirmMemoDelete } from "@/lib/preferences";
 import { downloadBlocker, startDownload } from "@/lib/download";
-import { useSwReady } from "@/lib/sw-client";
+import { swReason, useSwReady } from "@/lib/sw-client";
 import {
   formatBytes,
   memoLabel,
@@ -292,6 +284,22 @@ function ViewerBody({
     return (
       <div className="px-6 py-12 text-center text-xs text-(--color-fg-4)">
         첨부 파일이 없습니다
+      </div>
+    );
+  }
+
+  // 암호화 파일인데 워커가 없으면 아무것도 그리지 않는다.
+  //
+  // 예전에는 원본(암호문) URL 을 그대로 <img>/<iframe> 에 물렸다. 서버는 암호화
+  // 파일을 application/octet-stream 으로 내려보내므로 그림은 깨지고, PDF 는
+  // 브라우저가 렌더할 수 없어 **그냥 다운로드된다**. 화면은 빈 채로 남는다.
+  if (file.encrypted && !swReady) {
+    return (
+      <div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center">
+        <ShieldAlert className="h-8 w-8 text-(--color-fg-4)" />
+        <p className="text-sm break-keep text-(--color-fg-3)">
+          {swReason() ?? "복호화 준비 중입니다"}
+        </p>
       </div>
     );
   }
