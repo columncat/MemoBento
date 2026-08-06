@@ -41,6 +41,16 @@ export class MemoBentoClient {
     return this.request<T>(method, path, body);
   }
 
+  /**
+   * 가공하지 않은 바이트를 보낸다 (파일 조각 업로드).
+   *
+   * JSON 이 아니라 본문이 그대로 바이트다. 인증·재시도는 나머지와 같은 길을
+   * 쓴다 — 조각을 올리는 도중 세션이 만료되면 여기서도 다시 로그인해야 한다.
+   */
+  async raw<T>(method: string, path: string, bytes: Uint8Array): Promise<T> {
+    return this.request<T>(method, path, bytes);
+  }
+
   private cookieHeader(): string | undefined {
     if (this.cookies.size === 0) return undefined;
     return [...this.cookies].map(([k, v]) => `${k}=${v}`).join("; ");
@@ -75,6 +85,8 @@ export class MemoBentoClient {
   ): Promise<Response> {
     const ctl = new AbortController();
     const timer = setTimeout(() => ctl.abort(), this.opts.timeoutMs);
+    // 바이트를 그대로 보내는 경우(파일 조각)와 JSON 을 보내는 경우를 가른다.
+    const isBytes = body instanceof Uint8Array;
     try {
       const res = await fetch(new URL(path, this.opts.baseUrl), {
         method,
@@ -87,10 +99,17 @@ export class MemoBentoClient {
           // 감사 로그가 아니라 기록이다 — 위조를 막는 것이 목적이 아니라,
           // 나중에 "이 메모 왜 바뀌었지" 를 되짚을 수 있게 하는 것이다.
           "x-mb-agent": process.env.MEMOBENTO_AGENT_NAME || "MCP",
-          ...(body === undefined ? {} : { "content-type": "application/json" }),
+          ...(body === undefined
+            ? {}
+            : { "content-type": isBytes ? "application/octet-stream" : "application/json" }),
           ...(this.cookieHeader() ? { cookie: this.cookieHeader()! } : {}),
         },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        body:
+          body === undefined
+            ? undefined
+            : isBytes
+              ? (body as Uint8Array)
+              : JSON.stringify(body),
         signal: ctl.signal,
       });
       this.absorbCookies(res);

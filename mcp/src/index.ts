@@ -10,6 +10,7 @@
  *   MEMOBENTO_URL       기본 http://127.0.0.1:3001
  *   MEMOBENTO_PASSWORD  인증이 켜진 서버라면 필수
  *   MEMOBENTO_TIMEOUT_MS 기본 15000
+ *   MEMOBENTO_UPLOAD_DIR 파일을 올릴 수 있게 할 폴더. 비우면 업로드가 꺼진다.
  */
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
@@ -24,6 +25,7 @@ import {
   shapeNotebook,
   type NotebooksResponse,
 } from "./shape.js";
+import { uploadFile } from "./upload.js";
 
 const NOTEBOOK_KINDS = ["memo", "checklist", "todo", "schedule"] as const;
 const VIEW_MODES = ["list", "grid"] as const;
@@ -355,6 +357,35 @@ server.registerTool(
               found.memo.url,
             )
           : null,
+      });
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "upload_file",
+  {
+    title: "파일 메모 넣기",
+    description:
+      "미리 정해 둔 폴더(MEMOBENTO_UPLOAD_DIR)에 있는 파일을 메모함에 올린다. " +
+      "그림·PDF·일반 파일 모두 된다. 앱과 같은 방식으로 조각내 암호화해 보관한다. " +
+      "파일을 받을 수 있는 메모함이어야 한다 — Corkboard(링크 전용)나 " +
+      "체크리스트·TODO·반복 일정 메모함은 받지 않는다. " +
+      "이 폴더가 설정돼 있지 않으면 이 도구는 쓸 수 없다.",
+    inputSchema: {
+      notebook: z.string().describe("메모함 id 또는 정확한 이름"),
+      file: z.string().min(1).describe("그 폴더 안의 파일 이름 (경로 말고 이름만)"),
+    },
+  },
+  async ({ notebook, file }) => {
+    try {
+      const target = resolveNotebook(await list(), notebook);
+      const r = await uploadFile(client, target.id, file);
+      return ok({
+        notebook: { id: target.id, name: target.name },
+        uploaded: { name: r.name, size: r.size, fileId: r.fileId },
       });
     } catch (e) {
       return fail(e);
