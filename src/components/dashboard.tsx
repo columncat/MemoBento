@@ -52,6 +52,7 @@ import { cn } from "@/lib/utils";
 
 import { MailBentoLink } from "./cross-app-link";
 import type { MemoActions } from "./memo-item";
+import { MemoRef } from "./memo-ref";
 import { MemoViewer } from "./memo-viewer";
 import { NotebookModal } from "./notebook-modal";
 import { ScheduleGridModal } from "./schedule-grid";
@@ -434,7 +435,21 @@ export function Dashboard({
               </span>
             )}
           </button>
-          <AgentChat />
+          {/*
+            채팅창은 메모를 모른다. 여기서 목록과 체크 동작을 넘겨 준다 —
+            에이전트 답변 속 메모가 화면의 것과 같은 상태를 보고, 체크도 목록
+            쪽과 똑같은 경로를 탄다.
+          */}
+          <AgentChat
+            renderMemoRef={(memoId, block) => (
+              <MemoRef
+                notebooks={notebooks}
+                memoId={memoId}
+                block={block}
+                onToggle={handlers.checklist.onToggle}
+              />
+            )}
+          />
           <MailBentoLink href={mailbentoUrl} />
           <Link
             href="/settings"
