@@ -65,6 +65,22 @@ export async function middleware(req: NextRequest) {
     if (session) return NextResponse.next();
   }
 
+  /*
+   * 보낼 곳은 `nextUrl` 을 복사해 만든다.
+   *
+   * `new URL("/login", req.url)` 로 만들면 하위 경로 배포에서 접두어가 빠진다.
+   * `req.url` 은 `https://…/memo/settings` 인데 절대 경로를 얹으면 그 앞이
+   * 통째로 지워져 `https://…/login` 이 되고, 그 자리에는 아무것도 없다.
+   * `nextUrl` 은 자기가 어느 접두어 아래 있는지 알고 있어서 다시 붙여 준다.
+   */
+  const to = (path: string, params?: Record<string, string>) => {
+    const url = req.nextUrl.clone();
+    url.pathname = path;
+    url.search = "";
+    for (const [k, v] of Object.entries(params ?? {})) url.searchParams.set(k, v);
+    return url;
+  };
+
   // 화면 이동이면 갱신을 거쳐 원래 자리로 돌려보낸다. API 는 그럴 수 없다 —
   // 리다이렉트를 따라간 fetch 는 갱신 라우트가 마지막에 내보내는 HTML 을
   // 받아 들고 JSON 인 줄 알고 읽는다. 401 을 주고 화면이 다시 부르게 한다.
@@ -73,19 +89,17 @@ export async function middleware(req: NextRequest) {
     const remember = await verifySession(rememberToken);
     if (remember) {
       if (isApi(pathname)) return unauthorized();
-      const renewUrl = new URL("/api/auth/auto-renew", req.url);
-      renewUrl.searchParams.set("to", pathname + req.nextUrl.search);
-      return NextResponse.redirect(renewUrl);
+      return NextResponse.redirect(
+        to("/api/auth/auto-renew", { to: pathname + req.nextUrl.search }),
+      );
     }
   }
 
   if (isApi(pathname)) return unauthorized();
 
-  const loginUrl = new URL("/login", req.url);
-  if (pathname !== "/") {
-    loginUrl.searchParams.set("from", pathname + req.nextUrl.search);
-  }
-  return NextResponse.redirect(loginUrl);
+  return NextResponse.redirect(
+    to("/login", pathname === "/" ? undefined : { from: pathname + req.nextUrl.search }),
+  );
 }
 
 export const config = {
@@ -100,5 +114,13 @@ export const config = {
    * 정적 자산은 아래 PUBLIC_PREFIXES 의 "/_next" · "/favicon" 이 이미
    * 통과시키므로 여기서 뺄 이유가 없다.
    */
-  matcher: ["/((?!_next/static|_next/image|favicon\\.ico).*)"],
+  /*
+   * 첫 화면("/")을 따로 적는다.
+   *
+   * 하위 경로 배포에서 Next 는 이 패턴 앞에 접두어를 붙여 `/memo/((?!…).*)`
+   * 로 만든다. 그러면 `/memo/settings` 는 걸리는데 **`/memo` 자체는 뒤에
+   * 슬래시가 없어 안 걸린다.** 첫 화면이 미들웨어를 통째로 건너뛰어 로그인
+   * 없이 열렸다. 접두어가 없는 배포에서는 원래 걸리던 것이라 눈에 띄지 않았다.
+   */
+  matcher: ["/", "/((?!_next/static|_next/image|favicon\\.ico).*)"],
 };

@@ -10,6 +10,16 @@ CONFIG_DIR="${BENTO_CONFIG_DIR:-/config}"
 CONFIG="$CONFIG_DIR/memobento.env"
 DONE="$CONFIG_DIR/setup.json"
 
+# 설정을 환경변수로 직접 받는 배포는 예전 그대로 둔다.
+#
+# 이 갈림길이 없으면 멀쩡히 돌던 배포가 다음 이미지에서 영영 기다리기만 한다.
+# 실제로 그랬다 — 22분 동안 "설정을 기다립니다" 만 찍으며 앱이 안 떴다.
+# 기다림은 스택이 관리하는 배포(BENTO_MANAGED=1)에서만 한다.
+if [ "${BENTO_MANAGED:-}" != "1" ] && [ ! -f "$DONE" ]; then
+  echo "[memobento] 환경변수로 설정된 배포입니다. 앱을 시작합니다."
+  exec node server.js
+fi
+
 waited=0
 while [ ! -f "$DONE" ] || [ ! -f "$CONFIG" ]; do
   if [ "$waited" -eq 0 ]; then
