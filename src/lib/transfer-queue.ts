@@ -1,4 +1,5 @@
 import { encryptChunk, getFileKey } from "./crypto-client";
+import { isUnauthenticated, readJson } from "./read-json";
 import { makeThumbnail } from "./thumbnail";
 import type { NotebookDTO } from "./types";
 
@@ -138,14 +139,13 @@ async function uploadOne(item: TransferItem, file: File): Promise<void> {
         encrypted: true,
       }),
     });
-    const init = (await initRes.json()) as {
+    const init = await readJson<{
       uploadId?: string;
       chunkSize?: number;
       chunks?: number;
-      error?: string;
-    };
-    if (!initRes.ok || !init.uploadId || !init.chunkSize) {
-      throw new Error(init.error ?? `HTTP ${initRes.status}`);
+    }>(initRes);
+    if (!init.uploadId || !init.chunkSize) {
+      throw new Error("업로드 자리를 받지 못했습니다");
     }
     uploadId = init.uploadId;
 
@@ -177,18 +177,23 @@ async function uploadOne(item: TransferItem, file: File): Promise<void> {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ uploadId, thumb: thumb ?? undefined }),
     });
-    const fin = (await finRes.json()) as {
-      notebooks?: NotebookDTO[];
-      error?: string;
-    };
-    if (!finRes.ok) throw new Error(fin.error ?? `HTTP ${finRes.status}`);
+    const fin = await readJson<{ notebooks?: NotebookDTO[] }>(finRes);
 
     item.status = "done";
     item.sent = file.size;
     emit();
     if (fin.notebooks) onFinished?.(fin.notebooks);
   } catch (e) {
-    if (uploadId) {
+    /*
+     * 반쯤 올라간 조각은 치운다 — 다만 로그인이 풀린 경우는 빼고.
+     *
+     * 큰 파일은 조각 전송에만 수십 분이 걸린다. 마지막 확정에서 세션이
+     * 만료되면 조각은 서버에 다 올라간 뒤인데, 여기서 지워 버리면 그 수십 분이
+     * 통째로 날아간다. 지우자고 보낸 요청도 어차피 같은 이유로 거절된다.
+     * 남겨 두면 다시 로그인한 뒤 이어 볼 여지가 있고, 아니어도 서버가 때가
+     * 되면 스스로 치운다.
+     */
+    if (uploadId && !isUnauthenticated(e)) {
       void fetch(`/api/upload/finish?id=${encodeURIComponent(uploadId)}`, {
         method: "DELETE",
       }).catch(() => undefined);
@@ -197,7 +202,11 @@ async function uploadOne(item: TransferItem, file: File): Promise<void> {
       item.status = "canceled";
     } else {
       item.status = "error";
-      item.error = e instanceof Error ? e.message : "업로드 실패";
+      item.error = isUnauthenticated(e)
+        ? "로그인이 풀렸습니다. 새로고침하고 다시 시도하세요."
+        : e instanceof Error
+          ? e.message
+          : "업로드 실패";
     }
     emit();
   }

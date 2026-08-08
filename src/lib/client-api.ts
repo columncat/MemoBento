@@ -1,3 +1,4 @@
+import { readJson } from "./read-json";
 import type { MemoColor, NotebookDTO, NotebookKind, ViewMode } from "./types";
 
 /**
@@ -5,16 +6,22 @@ import type { MemoColor, NotebookDTO, NotebookKind, ViewMode } from "./types";
  * 단일 사용자 앱이고 payload 가 작아(썸네일 바이트 미포함) 상태 동기화가 단순해진다.
  */
 
-async function mutate(
-  url: string,
-  init: RequestInit,
-): Promise<NotebookDTO[]> {
+/**
+ * 예전에는 파싱 실패를 `{}` 로 뭉갰다.
+ *
+ * 그 한 줄이 조용한 사고를 만들었다. 세션이 풀리면 미들웨어가 로그인 페이지로
+ * 리다이렉트했고, fetch 는 그걸 따라가 **HTML 을 200 으로** 받아 왔다.
+ * `res.ok` 는 참이라 오류로 잡히지 않고, 파싱 실패는 `{}` 가 되고, 결국
+ * `json.notebooks ?? []` 가 빈 배열을 돌려줬다. 화면은 그 빈 배열을 그대로
+ * 상태에 넣었다 — **메모함이 전부 사라진 것처럼 보였다.** 아무 오류도 뜨지
+ * 않은 채로.
+ *
+ * 이제 두 겹으로 막는다. 미들웨어가 API 에는 401 JSON 을 주고, 여기서는
+ * 읽지 못한 응답을 조용히 넘기지 않는다.
+ */
+async function mutate(url: string, init: RequestInit): Promise<NotebookDTO[]> {
   const res = await fetch(url, { cache: "no-store", ...init });
-  const json = (await res.json().catch(() => ({}))) as {
-    notebooks?: NotebookDTO[];
-    error?: string;
-  };
-  if (!res.ok) throw new Error(json.error ?? `HTTP ${res.status}`);
+  const json = await readJson<{ notebooks?: NotebookDTO[] }>(res);
   return json.notebooks ?? [];
 }
 

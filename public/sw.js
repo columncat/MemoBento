@@ -21,9 +21,19 @@ let keyPromise = null;
 function getKey() {
   if (!keyPromise) {
     keyPromise = fetch("/api/files/key", { credentials: "same-origin" })
-      .then((r) => {
-        if (!r.ok) throw new Error("key fetch failed: " + r.status);
-        return r.json();
+      .then(async (r) => {
+        // 401 은 세션이 풀린 것이다. 그대로 "key fetch failed: 401" 이라고
+        // 하면 파일을 열었을 때 그 문장이 탭에 뜬다 — 무엇을 해야 하는지가
+        // 담겨 있지 않다.
+        if (r.status === 401) throw new Error("로그인이 풀렸습니다. 새로고침해 주세요.");
+        if (!r.ok) throw new Error("키를 가져오지 못했습니다 (" + r.status + ")");
+        // 200 인데 JSON 이 아닐 수 있다 (앞단이 오류 페이지를 감싸 보낼 때).
+        const text = await r.text();
+        try {
+          return JSON.parse(text);
+        } catch {
+          throw new Error("키 대신 웹 페이지가 왔습니다. 로그인이 풀렸을 수 있습니다.");
+        }
       })
       .then(({ key }) => {
         const raw = Uint8Array.from(atob(key), (c) => c.charCodeAt(0));
