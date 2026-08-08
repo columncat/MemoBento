@@ -36,9 +36,13 @@ COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/drizzle ./drizzle
 
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # DB / 업로드 영속 디렉터리 (compose 볼륨으로 마운트)
-RUN mkdir -p /app/data/uploads && chown -R nodejs:nodejs /app
+# /config 는 세 컨테이너가 함께 보는 자리다 — 여기서는 읽기만 한다.
+RUN mkdir -p /app/data/uploads /config && chown -R nodejs:nodejs /app /config
 USER nodejs
 
 EXPOSE 3000
-CMD ["node", "server.js"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
