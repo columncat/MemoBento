@@ -13,6 +13,7 @@ import type {
 } from "./db/schema";
 
 import type { Recurrence } from "./recurrence";
+import { apiPath } from "./api-path";
 
 export type { FileKind, MemoColor, MemoType, NotebookKind, SystemKey, ViewMode };
 export type { Recurrence };
@@ -106,7 +107,7 @@ export interface MemoDragPayload {
 
 /** 저장된 바이트 그대로의 URL (암호화 파일이면 암호문). */
 export function fileUrl(fileId: string, dl = false): string {
-  return `/api/files/${encodeURIComponent(fileId)}${dl ? "?dl=1" : ""}`;
+  return apiPath(`/api/files/${encodeURIComponent(fileId)}${dl ? "?dl=1" : ""}`);
 }
 
 /**
@@ -123,9 +124,9 @@ export function viewUrl(
   const { dl = false, swReady = false } = opts;
   if (!file.encrypted) return fileUrl(file.id, dl);
   if (!swReady) return fileUrl(file.id, dl);
-  return `/dl/${encodeURIComponent(file.id)}/${encodeURIComponent(file.name)}${
-    dl ? "?dl=1" : ""
-  }`;
+  return apiPath(
+    `/dl/${encodeURIComponent(file.id)}/${encodeURIComponent(file.name)}${dl ? "?dl=1" : ""}`,
+  );
 }
 
 /** 썸네일 URL. 암호화된 썸네일은 서비스 워커가 풀어서 그린다. */
@@ -133,8 +134,8 @@ export function thumbUrl(
   file: Pick<FileDTO, "id" | "encrypted">,
   swReady = false,
 ): string {
-  if (file.encrypted && swReady) return `/dl/t/${encodeURIComponent(file.id)}`;
-  return `/api/files/${encodeURIComponent(file.id)}/thumb`;
+  if (file.encrypted && swReady) return apiPath(`/dl/t/${encodeURIComponent(file.id)}`);
+  return apiPath(`/api/files/${encodeURIComponent(file.id)}/thumb`);
 }
 
 /** 메모 표시 이름 — 파일 메모는 title override 없으면 원본 파일명. */

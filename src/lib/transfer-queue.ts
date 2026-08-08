@@ -2,6 +2,7 @@ import { encryptChunk, getFileKey } from "./crypto-client";
 import { isUnauthenticated, readJson } from "./read-json";
 import { makeThumbnail } from "./thumbnail";
 import type { NotebookDTO } from "./types";
+import { apiFetch } from "./api-path";
 
 /**
  * 업로드 큐.
@@ -129,7 +130,7 @@ async function uploadOne(item: TransferItem, file: File): Promise<void> {
       ? await encryptThumb(key, thumbDataUrl)
       : null;
 
-    const initRes = await fetch("/api/upload/init", {
+    const initRes = await apiFetch("/api/upload/init", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -172,7 +173,7 @@ async function uploadOne(item: TransferItem, file: File): Promise<void> {
 
     if (canceled.has(item.id)) throw new CanceledError();
 
-    const finRes = await fetch("/api/upload/finish", {
+    const finRes = await apiFetch("/api/upload/finish", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ uploadId, thumb: thumb ?? undefined }),
@@ -194,7 +195,7 @@ async function uploadOne(item: TransferItem, file: File): Promise<void> {
      * 되면 스스로 치운다.
      */
     if (uploadId && !isUnauthenticated(e)) {
-      void fetch(`/api/upload/finish?id=${encodeURIComponent(uploadId)}`, {
+      void apiFetch(`/api/upload/finish?id=${encodeURIComponent(uploadId)}`, {
         method: "DELETE",
       }).catch(() => undefined);
     }
@@ -244,8 +245,7 @@ async function putChunkWithRetry(
   for (let attempt = 0; attempt < CHUNK_RETRIES; attempt++) {
     if (canceled.has(item.id)) throw new CanceledError();
     try {
-      const res = await fetch(
-        `/api/upload/chunk?id=${encodeURIComponent(uploadId)}&index=${index}`,
+      const res = await apiFetch(`/api/upload/chunk?id=${encodeURIComponent(uploadId)}&index=${index}`,
         {
           method: "PUT",
           headers: { "Content-Type": "application/octet-stream" },

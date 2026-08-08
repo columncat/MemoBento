@@ -10,6 +10,7 @@ import {
 import { useCallback, useEffect, useState } from "react";
 
 import { cn, formatDateTime } from "@/lib/utils";
+import { apiFetch } from "@/lib/api-path";
 
 interface TrashEntry {
   id: string;
@@ -29,7 +30,7 @@ export function TrashPanel({ retentionDays }: { retentionDays: number }) {
 
   const load = useCallback(async () => {
     try {
-      const res = await fetch("/api/trash", { cache: "no-store" });
+      const res = await apiFetch("/api/trash", { cache: "no-store" });
       const j = (await res.json()) as { trash?: TrashEntry[] };
       setEntries(j.trash ?? []);
     } catch {
@@ -48,7 +49,7 @@ export function TrashPanel({ retentionDays }: { retentionDays: number }) {
     setBusy(id);
     setError(null);
     try {
-      const res = await fetch("/api/trash", {
+      const res = await apiFetch("/api/trash", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id, action }),

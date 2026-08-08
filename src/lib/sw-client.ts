@@ -56,8 +56,19 @@ export function registerDecryptWorker(): void {
     return;
   }
 
+  /*
+   * 하위 경로 배포에서는 워커도 그 아래에 있어야 한다.
+   *
+   * 서비스 워커의 스코프는 스크립트가 놓인 자리를 넘을 수 없다. `/memo` 아래
+   * 앱이 `/sw.js` 를 부르면 그 주소에는 아무것도 없고, 스코프를 `/` 로 달라고
+   * 하면 브라우저가 거절한다. 둘 다 접두어를 붙여야 한다.
+   *
+   * 접두어가 붙으면 워커가 가로채는 자리도 `/memo/dl/…` 이 되므로 워커 안의
+   * 판정도 함께 바꿔야 한다 (public/sw.js 참고).
+   */
+  const base = (process.env.NEXT_PUBLIC_BASE_PATH ?? "").replace(/\/$/, "");
   navigator.serviceWorker
-    .register("/sw.js", { scope: "/" })
+    .register(`${base}/sw.js`, { scope: `${base}/` })
     .then(() => navigator.serviceWorker.ready)
     .then(() => {
       // controller 가 잡혀야 fetch 가 가로채진다

@@ -17,6 +17,11 @@ RUN npm install --no-audit --no-fund
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# 하위 경로 배포용. 비우면 뿌리에서 돈다.
+# Next 가 이 값을 산출물 곳곳에 미리 심으므로 런타임에는 바꿀 수 없다.
+ARG BASE_PATH=""
+ENV BASE_PATH=$BASE_PATH
 RUN npm run build
 
 # ── 런타임 ──

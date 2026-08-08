@@ -1,3 +1,4 @@
+import { apiFetch } from "./api-path";
 /**
  * 브라우저 쪽 파일 암호화.
  *
@@ -20,7 +21,7 @@ let keyPromise: Promise<CryptoKey> | null = null;
 export function getFileKey(): Promise<CryptoKey> {
   if (!keyPromise) {
     keyPromise = (async () => {
-      const res = await fetch("/api/files/key", { cache: "no-store" });
+      const res = await apiFetch("/api/files/key", { cache: "no-store" });
       if (!res.ok) throw new Error("암호화 키를 가져오지 못했습니다");
       const { key } = (await res.json()) as { key: string };
       const raw = Uint8Array.from(atob(key), (c) => c.charCodeAt(0));

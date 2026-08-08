@@ -12,6 +12,21 @@ const IV_LEN = 12;
 const TAG_LEN = 16;
 const GCM_OVERHEAD = IV_LEN + TAG_LEN;
 
+/**
+ * 하위 경로 배포에서 앞에 붙는 것 (`/memo` 같은).
+ *
+ * 빌드할 때 심지 않고 자기 스코프에서 알아낸다. 워커의 스코프는 스크립트가
+ * 놓인 자리를 넘을 수 없으므로, 등록될 때 이미 정답이 정해져 있다 —
+ * `https://…/memo/` 에서 `/memo` 를 떼면 된다. 뿌리에 있으면 빈 문자열이라
+ * 예전과 똑같이 동작한다.
+ */
+const BASE = new URL(self.registration.scope).pathname.replace(/\/$/, "");
+
+/** 앱 안의 절대 경로를 실제 주소로. */
+function at(path) {
+  return BASE + path;
+}
+
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (e) => e.waitUntil(self.clients.claim()));
 
@@ -20,7 +35,7 @@ let keyPromise = null;
 /** 키는 워커가 직접 받아온다 (같은 오리진이라 세션 쿠키가 실린다). */
 function getKey() {
   if (!keyPromise) {
-    keyPromise = fetch("/api/files/key", { credentials: "same-origin" })
+    keyPromise = fetch(at("/api/files/key"), { credentials: "same-origin" })
       .then(async (r) => {
         // 401 은 세션이 풀린 것이다. 그대로 "key fetch failed: 401" 이라고
         // 하면 파일을 열었을 때 그 문장이 탭에 뜬다 — 무엇을 해야 하는지가
@@ -119,13 +134,13 @@ self.addEventListener("fetch", (event) => {
   if (url.origin !== self.location.origin) return;
 
   // 썸네일: /dl/t/<fileId>  (레코드 하나짜리 암호문)
-  const t = /^\/dl\/t\/([^/]+)$/.exec(url.pathname);
+  const t = new RegExp("^" + BASE + "/dl/t/([^/]+)$").exec(url.pathname);
   if (t) {
     event.respondWith(serveThumb(t[1]));
     return;
   }
 
-  const m = /^\/dl\/([^/]+)(?:\/.*)?$/.exec(url.pathname);
+  const m = new RegExp("^" + BASE + "/dl/([^/]+)(?:/.*)?$").exec(url.pathname);
   if (!m) return;
 
   const fileId = m[1];
@@ -135,7 +150,7 @@ self.addEventListener("fetch", (event) => {
 
 async function serveThumb(fileId) {
   const upstream = await fetch(
-    `/api/files/${encodeURIComponent(fileId)}/thumb`,
+    at(`/api/files/${encodeURIComponent(fileId)}/thumb`),
     { credentials: "same-origin" },
   );
   if (!upstream.ok) return upstream;
@@ -162,7 +177,7 @@ async function serveThumb(fileId) {
 async function serve(fileId, wantsDownload, request) {
   // Range 는 암호문 오프셋 기준이라 그대로 넘기면 복호화가 어긋난다.
   // 처음부터 스트리밍해서 내려준다 (브라우저 다운로드 관리자가 이어서 처리).
-  const upstream = await fetch(`/api/files/${encodeURIComponent(fileId)}`, {
+  const upstream = await fetch(at(`/api/files/${encodeURIComponent(fileId)}`), {
     credentials: "same-origin",
     cache: "no-store",
     headers: request.headers.get("accept")

@@ -2,6 +2,7 @@
 
 import { Bot, Loader2, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api-path";
 
 interface Entry {
   id: number;
@@ -26,7 +27,7 @@ export function AgentLogPanel() {
   const load = async () => {
     setLoading(true);
     try {
-      const r = await fetch("/api/agent-log");
+      const r = await apiFetch("/api/agent-log");
       const j = (await r.json()) as { entries?: Entry[]; retentionDays?: number };
       setEntries(j.entries ?? []);
       if (j.retentionDays) setDays(j.retentionDays);
@@ -43,7 +44,7 @@ export function AgentLogPanel() {
     if (!confirm("기록을 모두 지웁니다. 메모나 메모함이 사라지지는 않습니다. 진행할까요?")) {
       return;
     }
-    await fetch("/api/agent-log", { method: "DELETE" });
+    await apiFetch("/api/agent-log", { method: "DELETE" });
     void load();
   };
 
