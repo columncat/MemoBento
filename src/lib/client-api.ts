@@ -1,3 +1,4 @@
+import { apiPath } from "./api-path";
 import { readJson } from "./read-json";
 import type { MemoColor, NotebookDTO, NotebookKind, ViewMode } from "./types";
 
@@ -20,7 +21,9 @@ import type { MemoColor, NotebookDTO, NotebookKind, ViewMode } from "./types";
  * 읽지 못한 응답을 조용히 넘기지 않는다.
  */
 async function mutate(url: string, init: RequestInit): Promise<NotebookDTO[]> {
-  const res = await fetch(url, { cache: "no-store", ...init });
+  // 하위 경로 배포에서 접두어를 붙인다. 아래 api 객체의 주소는 전부 절대
+  // 경로라, 여기서 한 번에 처리하는 편이 호출부마다 손대는 것보다 안전하다.
+  const res = await fetch(apiPath(url), { cache: "no-store", ...init });
   const json = await readJson<{ notebooks?: NotebookDTO[] }>(res);
   return json.notebooks ?? [];
 }
