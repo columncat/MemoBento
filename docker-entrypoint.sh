@@ -24,6 +24,15 @@ while [ ! -f "$DONE" ] || [ ! -f "$CONFIG" ]; do
   sleep 3
 done
 
+if [ ! -r "$CONFIG" ]; then
+  echo "[memobento] $CONFIG 를 읽을 수 없습니다 (지금 uid=$(id -u))." >&2
+  echo "  호스트 폴더의 주인이 다릅니다. 스택 폴더에서 한 번 돌리세요:" >&2
+  echo "    docker compose run --rm --no-deps --user 0 --entrypoint sh memobento \\" >&2
+  echo "      -c 'chown -R 1001:1001 /app/data'" >&2
+  echo "  bootstrap.sh 로 띄우면 이 일을 알아서 합니다." >&2
+  exit 1
+fi
+
 set -a
 # shellcheck disable=SC1090
 . "$CONFIG"
