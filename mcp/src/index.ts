@@ -25,6 +25,7 @@ import {
   shapeNotebook,
   type NotebooksResponse,
 } from "./shape.js";
+import { fetchFile, viewableKind, MAX_READ_BYTES } from "./download.js";
 import { uploadFile } from "./upload.js";
 
 const NOTEBOOK_KINDS = ["memo", "checklist", "todo", "schedule"] as const;
@@ -386,6 +387,98 @@ server.registerTool(
       return ok({
         notebook: { id: target.id, name: target.name },
         uploaded: { name: r.name, size: r.size, fileId: r.fileId },
+      });
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+
+server.registerTool(
+  "read_file",
+  {
+    title: "파일 메모 읽기",
+    description:
+      "메모함에 올려 둔 파일을 열어 본다. 그림과 PDF 는 내용을 그대로 볼 수 있고, " +
+      "그 밖의 형식은 무엇인지만 알려 준다. " +
+      "파일은 조각마다 잠겨 있는데 여기서 풀어 준다 — 사람이 브라우저에서 여는 것과 같다. " +
+      "메모 id 는 list_notebooks 나 search_memos 가 준 것을 쓴다.",
+    inputSchema: {
+      memoId: z.string().min(1).describe("파일이 붙어 있는 메모의 id"),
+    },
+  },
+  async ({ memoId }) => {
+    try {
+      const found = findMemo(await list(), memoId);
+      if (!found) throw new Error(`그런 메모가 없습니다: ${memoId}`);
+      const { memo, notebook } = found;
+      if (!memo.file) throw new Error("이 메모에는 파일이 없습니다 (텍스트나 링크 메모입니다)");
+
+      if (memo.file.size > MAX_READ_BYTES) {
+        return ok({
+          notebook: { id: notebook.id, name: notebook.name },
+          file: { name: memo.file.name, size: memo.file.size, kind: memo.file.kind },
+          read: false,
+          note: `너무 커서 열지 않았습니다 (${Math.round(memo.file.size / 1024 / 1024)}MB). 상한은 ${MAX_READ_BYTES / 1024 / 1024}MB 입니다.`,
+        });
+      }
+
+      const got = await fetchFile(client, memo.file.id);
+      const kind = viewableKind(got.mimeType);
+
+      if (kind === "image") {
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                { notebook: notebook.name, file: got.name, mimeType: got.mimeType },
+                null,
+                1,
+              ),
+            },
+            {
+              type: "image" as const,
+              data: got.bytes.toString("base64"),
+              mimeType: got.mimeType,
+            },
+          ],
+        };
+      }
+
+      if (kind === "pdf") {
+        /*
+         * MCP 응답에는 문서 종류가 없다 — 글·그림·소리·자원뿐이다.
+         * 자원(resource)으로 실어 보내면 부르는 쪽이 알아서 다루기를 기대할 수
+         * 있지만, 그러지 못하는 구현도 있다. 그래서 무엇인지도 함께 적는다.
+         */
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: JSON.stringify(
+                { notebook: notebook.name, file: got.name, mimeType: got.mimeType },
+                null,
+                1,
+              ),
+            },
+            {
+              type: "resource" as const,
+              resource: {
+                uri: `memobento://file/${memo.file.id}`,
+                mimeType: got.mimeType,
+                blob: got.bytes.toString("base64"),
+              },
+            },
+          ],
+        };
+      }
+
+      return ok({
+        notebook: { id: notebook.id, name: notebook.name },
+        file: { name: got.name, size: got.bytes.length, mimeType: got.mimeType },
+        read: false,
+        note: "그림이나 PDF 가 아니라 내용은 볼 수 없습니다. 무엇인지만 알려 드립니다.",
       });
     } catch (e) {
       return fail(e);

@@ -63,6 +63,21 @@ export class MemoBentoClient {
     return this.request<T>(method, path, bytes);
   }
 
+  /**
+   * 응답을 JSON 으로 읽지 않고 그대로 돌려준다 (파일 내려받기).
+   *
+   * 헤더에 복호화에 필요한 값들이 실려 오므로 응답 객체 자체가 필요하다.
+   * 인증이 풀렸으면 한 번 다시 로그인하고 재시도하는 것은 나머지와 같다.
+   */
+  async rawGet(path: string): Promise<Response> {
+    let res = await this.fetchOnce("GET", path);
+    if (MemoBentoClient.isAuthBounce(res)) {
+      await this.login();
+      res = await this.fetchOnce("GET", path);
+    }
+    return res;
+  }
+
   private cookieHeader(): string | undefined {
     if (this.cookies.size === 0) return undefined;
     return [...this.cookies].map(([k, v]) => `${k}=${v}`).join("; ");

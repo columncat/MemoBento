@@ -13,7 +13,15 @@ export interface Memo {
   text: string | null;
   title: string | null;
   url: string | null;
-  file: { name: string; size: number; kind: string; encrypted: boolean } | null;
+  // `id` 는 화면에 보여 주지 않지만(shapeMemo 가 뺀다) 파일을 받아 오려면
+  // 필요하다. 앱이 이미 내려주고 있으므로 형에만 적어 둔다.
+  file: {
+    id: string;
+    name: string;
+    size: number;
+    kind: string;
+    encrypted: boolean;
+  } | null;
   done: boolean;
   dueAt: number | null;
   recurrence: unknown;
