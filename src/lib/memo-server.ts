@@ -58,6 +58,18 @@ export const SYSTEM_NOTEBOOKS: {
    */
   { id: "sys-agent-memory", systemKey: "agent-memory", name: "Memory for Agents", position: 900, kind: "memo", hidden: true },
   { id: "sys-agent-schedule", systemKey: "agent-schedule", name: "Schedule for Agents", position: 901, kind: "schedule", hidden: true },
+  /**
+   * 밖에서 들어온 파일이 먼저 놓이는 자리.
+   *
+   * 예전에는 Discord 로 온 첨부를 봇의 디스크 폴더에 놓아 두고 여섯 시간 뒤
+   * 지웠다. 에이전트가 그 사이에 "어느 메모함에 넣을까요" 를 묻고 답을 받아야
+   * 살아남는 구조라, 대화가 거기서 끊기면 파일이 그냥 사라졌다.
+   *
+   * 이제 받는 즉시 여기 놓인다. 어디로 갈지는 나중에 정하면 되고, 정하지
+   * 않아도 잃어버리지 않는다. 앞의 둘과 달리 접어 두지 않는다 — 사용자가 방금
+   * 보낸 것이 어디 갔는지 보여야 한다.
+   */
+  { id: "sys-agent-inbox", systemKey: "agent-inbox", name: "Inbox", position: 899, kind: "memo" },
 ];
 
 /**

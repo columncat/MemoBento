@@ -22,6 +22,7 @@ export const SYSTEM_KEYS = [
   "memo",
   "agent-memory",
   "agent-schedule",
+  "agent-inbox",
 ] as const;
 export type SystemKey = (typeof SYSTEM_KEYS)[number];
 

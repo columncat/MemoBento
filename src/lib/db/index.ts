@@ -39,6 +39,22 @@ function init(): DB {
     console.error("[memobento] migration failed:", err);
   }
 
+  /*
+   * 예전에 암호화해 둔 파일을 평문으로 되돌리는 이관.
+   *
+   * 한 박자 미뤄 부른다. 지금은 `_db` 가 아직 채워지지 않아서, 이 안에서 db 를
+   * 건드리면 init() 이 자기를 다시 부른다. 마이크로태스크는 이 함수가 끝나고
+   * 대입까지 마친 뒤에 돈다.
+   *
+   * `instrumentation.ts` 를 쓰지 않는 이유는, 그 파일이 미들웨어(edge) 번들에도
+   * 딸려 들어가 better-sqlite3 를 못 찾기 때문이다.
+   */
+  queueMicrotask(() => {
+    void import("../decrypt-files")
+      .then((m) => m.decryptStoredFiles())
+      .catch((e) => console.error("[memobento] 파일 되돌리기 시작 실패:", e));
+  });
+
   return drizzleDb;
 }
 
