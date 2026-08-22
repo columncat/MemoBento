@@ -81,7 +81,9 @@ async function decryptInPlace(
       off += recordSize;
       const iv = buf.subarray(0, IV_LEN);
       const body = buf.subarray(IV_LEN, recordSize - TAG_LEN);
-      const tag = buf.subarray(recordSize - TAG_LEN);
+      // 끝 인덱스를 반드시 준다. 버퍼는 가장 큰 레코드에 맞춰 잡아 두므로,
+      // 시작만 주면 마지막 짧은 조각에서 버퍼 끝까지가 통째로 태그가 된다.
+      const tag = buf.subarray(recordSize - TAG_LEN, recordSize);
       const d = createDecipheriv("aes-256-gcm", key, iv);
       d.setAuthTag(tag);
       // final() 이 여기서 던지면 태그가 안 맞는 것이다 — 위에서 잡아 건너뛴다.
