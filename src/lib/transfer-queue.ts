@@ -1,4 +1,3 @@
-import { encryptChunk, getFileKey } from "./crypto-client";
 import { isUnauthenticated, readJson } from "./read-json";
 import { makeThumbnail } from "./thumbnail";
 import type { NotebookDTO } from "./types";
@@ -122,13 +121,8 @@ async function uploadOne(item: TransferItem, file: File): Promise<void> {
 
   let uploadId: string | null = null;
   try {
-    const key = await getFileKey();
     // 썸네일은 원본을 읽어야 하므로 업로드 전에 만든다.
-    // 미리보기도 평문으로 남기지 않도록 레코드 하나로 암호화해서 보낸다.
-    const thumbDataUrl = await makeThumbnail(file);
-    const thumb = thumbDataUrl
-      ? await encryptThumb(key, thumbDataUrl)
-      : null;
+    const thumb = await makeThumbnail(file);
 
     const initRes = await apiFetch("/api/upload/init", {
       method: "POST",
@@ -137,7 +131,6 @@ async function uploadOne(item: TransferItem, file: File): Promise<void> {
         notebookId: item.notebookId,
         name: file.name,
         size: file.size,
-        encrypted: true,
       }),
     });
     const init = await readJson<{
@@ -164,8 +157,7 @@ async function uploadOne(item: TransferItem, file: File): Promise<void> {
       const plain = new Uint8Array(await slice.arrayBuffer());
       if (plain.byteLength === 0) break;
 
-      const record = await encryptChunk(key, plain);
-      await putChunkWithRetry(uploadId, index, record, item);
+      await putChunkWithRetry(uploadId, index, plain, item);
 
       item.sent = Math.min(file.size, start + plain.byteLength);
       emit();
@@ -215,25 +207,6 @@ async function uploadOne(item: TransferItem, file: File): Promise<void> {
 
 class CanceledError extends Error {}
 
-/** data URL 썸네일 → 암호화 레코드(base64). */
-async function encryptThumb(
-  key: CryptoKey,
-  dataUrl: string,
-): Promise<string | null> {
-  const comma = dataUrl.indexOf(",");
-  if (comma < 0) return null;
-  try {
-    const bin = atob(dataUrl.slice(comma + 1));
-    const bytes = new Uint8Array(bin.length);
-    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-    const record = await encryptChunk(key, bytes);
-    let out = "";
-    for (let i = 0; i < record.length; i++) out += String.fromCharCode(record[i]);
-    return btoa(out);
-  } catch {
-    return null;
-  }
-}
 
 async function putChunkWithRetry(
   uploadId: string,

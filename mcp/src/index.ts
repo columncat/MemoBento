@@ -365,16 +365,23 @@ server.registerTool(
   },
 );
 
+/*
+ * 폴더가 정해져 있을 때만 붙인다.
+ *
+ * 예전에는 늘 붙여 두고 부를 때 거절했다. 그러면 쓸 수 없는 도구의 설명과
+ * 인자가 매 요청 맥락에 실린다 — 모델이 있지도 않은 폴더를 두고 궁리하게
+ * 만들고, 값은 값대로 든다. 쓸 수 있을 때만 보이는 편이 맞다.
+ */
+if (process.env.MEMOBENTO_UPLOAD_DIR) {
 server.registerTool(
   "upload_file",
   {
     title: "파일 메모 넣기",
     description:
       "미리 정해 둔 폴더(MEMOBENTO_UPLOAD_DIR)에 있는 파일을 메모함에 올린다. " +
-      "그림·PDF·일반 파일 모두 된다. 앱과 같은 방식으로 조각내 암호화해 보관한다. " +
+      "그림·PDF·일반 파일 모두 된다. " +
       "파일을 받을 수 있는 메모함이어야 한다 — Corkboard(링크 전용)나 " +
-      "체크리스트·TODO·반복 일정 메모함은 받지 않는다. " +
-      "이 폴더가 설정돼 있지 않으면 이 도구는 쓸 수 없다.",
+      "체크리스트·TODO·반복 일정 메모함은 받지 않는다.",
     inputSchema: {
       notebook: z.string().describe("메모함 id 또는 정확한 이름"),
       file: z.string().min(1).describe("그 폴더 안의 파일 이름 (경로 말고 이름만)"),
@@ -393,6 +400,7 @@ server.registerTool(
     }
   },
 );
+}
 
 server.registerTool(
   "read_file",

@@ -133,13 +133,15 @@ export const files = sqliteTable("files", {
   /** 썸네일 PNG 의 UPLOAD_DIR 기준 상대 경로 (없으면 아이콘 폴백). */
   thumbPath: text("thumb_path"),
 
-  /**
-   * 1 = 브라우저에서 AES-GCM 으로 암호화해 올린 파일.
-   * 디스크에는 [IV(12) || ciphertext || tag(16)] 레코드가 chunkSize 단위로
-   * 이어붙어 있고, 서버는 복호화하지 않는다 (Cloudflare 도 암호문만 본다).
+  /*
+   * 파일을 암호화해 두던 시절의 흔적. 지금은 아무도 읽지 않는다.
+   *
+   * 컬럼을 지우지 않는 것은, 되돌리기가 어떤 파일에서 실패했을 때 그 사실이
+   * 여기 남아야 하기 때문이다 (`decrypt-files.ts`). 지우면 "아직 암호문인
+   * 파일이 있는가" 를 물어볼 자리가 사라진다. SQLite 에서 컬럼을 떼는 것은
+   * 테이블을 다시 쓰는 일이라 값도 싸지 않다.
    */
   encrypted: integer("encrypted").notNull().default(0),
-  /** 암호화 레코드 하나가 담는 평문 바이트 수. encrypted=0 이면 0. */
   chunkSize: integer("chunk_size").notNull().default(0),
   createdAt: integer("created_at", { mode: "timestamp" })
     .notNull()

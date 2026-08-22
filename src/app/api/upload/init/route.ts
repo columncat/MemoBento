@@ -12,7 +12,6 @@ const bodySchema = z.object({
   notebookId: z.string().min(1),
   name: z.string().min(1).max(400),
   size: z.number().int().nonnegative(),
-  encrypted: z.boolean().default(true),
 });
 
 /** 청크 업로드 시작 — 조각을 받을 자리를 잡고 uploadId 를 돌려준다. */
@@ -21,7 +20,7 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return NextResponse.json({ error: "invalid body" }, { status: 400 });
   }
-  const { notebookId, name, size, encrypted } = parsed.data;
+  const { notebookId, name, size } = parsed.data;
 
   const notebook = getNotebook(notebookId);
   if (!notebook) {
@@ -51,7 +50,7 @@ export async function POST(req: Request) {
     );
   }
 
-  const session = await createSession({ notebookId, name, size, encrypted });
+  const session = await createSession({ notebookId, name, size });
   return NextResponse.json({
     uploadId: session.id,
     chunkSize: PLAIN_CHUNK,

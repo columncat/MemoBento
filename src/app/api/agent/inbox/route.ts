@@ -5,7 +5,6 @@ import { logAgent } from "@/lib/agent-log";
 import { db, schema } from "@/lib/db";
 import { env } from "@/lib/env";
 import { contentTypeFor, extOf, kindOf, memoTypeForKind } from "@/lib/file-kind";
-import { getOrCreateFileKey } from "@/lib/file-key";
 import { removeStored } from "@/lib/file-store";
 import { acceptedTypes, createMemo, getNotebook } from "@/lib/memo-server";
 import { PLAIN_CHUNK, createSession, finalize, writeChunk } from "@/lib/upload-session";
@@ -17,18 +16,12 @@ export const runtime = "nodejs";
 /**
  * 밖에서 들어온 파일을 한 번에 받아 넣는다.
  *
- * 브라우저가 쓰는 `/api/upload/*` 는 세 번에 나눠 부른다 — 조각을 나눠 올리고,
- * 암호화도 브라우저가 한다. 큰 파일을 올리는 중에 창을 닫아도 이어 갈 수 있고,
- * 무엇보다 **서버가 평문을 보지 않기** 위해서다.
+ * 브라우저가 쓰는 `/api/upload/*` 는 세 번에 나눠 부른다. 큰 파일을 올리는 중에
+ * 창을 닫아도 이어 갈 수 있게 하려는 것이다.
  *
- * 이 입구는 그 길을 쓰지 못하는 쪽을 위한 것이다. Discord 로 온 첨부와 채팅창에
- * 붙인 파일이 여기로 온다. 봇은 브라우저가 아니라 조각내기·암호화를 다시 구현해야
- * 하는데, 같은 도커 망 안에서 한 번에 보낼 수 있는 크기(25MB 남짓)를 굳이 그렇게
- * 다룰 이유가 없다.
- *
- * 대신 **암호화를 서버가 한다.** 그 구간에서만 서버가 평문을 본다는 뜻이라 원래
- * 원칙에서 한 발 물러선다. 디스크에 놓이는 것은 여전히 암호문이고, 그 파일은
- * 브라우저 쪽과 똑같은 방식으로 복호화된다 — 저장된 것을 두 갈래로 만들지 않는다.
+ * 이 입구는 그 길이 필요 없는 쪽을 위한 것이다. Discord 로 온 첨부와 채팅창에
+ * 붙인 파일이 여기로 온다 — 같은 도커 망 안에서 한 번에 보낼 수 있는 크기(25MB
+ * 남짓)를 굳이 세 번에 나눠 다룰 이유가 없다.
  *
  * 썸네일은 만들지 않는다. 그건 브라우저가 만드는 것이고(서버에 이미지 처리
  * 의존성을 넣지 않으려는 선택), 없으면 아이콘으로 그려진다.
@@ -36,17 +29,6 @@ export const runtime = "nodejs";
 
 /** 이 입구로 들어온 것이 기본으로 놓이는 자리. */
 const INBOX_NOTEBOOK = "sys-agent-inbox";
-
-const IV_BYTES = 12;
-
-/** 브라우저와 같은 규칙으로 조각 하나를 암호화한다: IV(12) ‖ 암호문 ‖ 태그(16). */
-async function encryptChunk(key: Buffer, plain: Buffer): Promise<Buffer> {
-  const { createCipheriv, randomBytes } = await import("node:crypto");
-  const iv = randomBytes(IV_BYTES);
-  const cipher = createCipheriv("aes-256-gcm", key, iv);
-  const body = Buffer.concat([cipher.update(plain), cipher.final()]);
-  return Buffer.concat([iv, body, cipher.getAuthTag()]);
-}
 
 export async function POST(req: Request) {
   let form: FormData;
@@ -87,23 +69,16 @@ export async function POST(req: Request) {
     );
   }
 
-  const key = Buffer.from(getOrCreateFileKey(), "base64");
-  const session = await createSession({
-    notebookId,
-    name,
-    size: plain.length,
-    encrypted: true,
-  });
+  const session = await createSession({ notebookId, name, size: plain.length });
 
   const fileId = uid();
   let path: string;
   try {
-    // 브라우저와 같은 조각 크기로 나눈다. 저장된 파일의 모양이 같아야
-    // 복호화하는 쪽이 하나로 유지된다.
+    // 브라우저가 올리는 것과 같은 조각 크기로 나눈다. 저장된 모양이 같아야
+    // 읽는 쪽이 하나로 유지된다.
     const count = plain.length === 0 ? 0 : Math.ceil(plain.length / PLAIN_CHUNK);
     for (let i = 0; i < count; i += 1) {
-      const slice = plain.subarray(i * PLAIN_CHUNK, (i + 1) * PLAIN_CHUNK);
-      await writeChunk(session, i, await encryptChunk(key, slice));
+      await writeChunk(session, i, plain.subarray(i * PLAIN_CHUNK, (i + 1) * PLAIN_CHUNK));
     }
     ({ path } = await finalize(session, fileId, extOf(name)));
   } catch (e) {
@@ -126,8 +101,8 @@ export async function POST(req: Request) {
         kind,
         path,
         thumbPath: null,
-        encrypted: 1,
-        chunkSize: PLAIN_CHUNK,
+        encrypted: 0,
+        chunkSize: 0,
       })
       .run();
 

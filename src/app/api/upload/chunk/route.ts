@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 
 import {
-  ENC_CHUNK,
   PLAIN_CHUNK,
   currentSize,
   loadSession,
@@ -36,7 +35,7 @@ export async function PUT(req: Request) {
   }
 
   const buf = new Uint8Array(await req.arrayBuffer());
-  const max = session.encrypted ? ENC_CHUNK : PLAIN_CHUNK;
+  const max = PLAIN_CHUNK;
   if (buf.byteLength === 0 || buf.byteLength > max) {
     return NextResponse.json(
       { error: `조각 크기가 잘못되었습니다 (${buf.byteLength} bytes)` },

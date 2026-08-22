@@ -260,7 +260,6 @@ function toFileDto(f: typeof schema.files.$inferSelect): FileDTO {
     size: f.size,
     kind: f.kind,
     hasThumb: !!f.thumbPath,
-    encrypted: f.encrypted === 1,
   };
 }
 

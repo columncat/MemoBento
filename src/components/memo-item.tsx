@@ -15,8 +15,7 @@ import {
 import { useRef, useState } from "react";
 
 import { activeMemoDrag, beginMemoDrag, endMemoDrag } from "@/lib/dnd";
-import { downloadBlocker, startDownload } from "@/lib/download";
-import { useSwReady } from "@/lib/sw-client";
+import { startDownload } from "@/lib/download";
 import {
   MEMO_DND_TYPE,
   hostnameOf,
@@ -75,7 +74,6 @@ function Thumb({
   size: "sm" | "lg";
   handleProps?: Record<string, unknown>;
 }) {
-  const swReady = useSwReady();
   const box = size === "sm" ? "h-10 w-10 rounded-md" : "h-full w-full rounded-none";
   // 클릭은 그대로 흘려보낸다 — 끌었다 놓아도 click 은 발생하지 않으므로,
   // 썸네일을 눌러 여는 동작과 끌어 옮기는 동작이 부딪히지 않는다.
@@ -122,12 +120,12 @@ function Thumb({
 
   // 워커가 없으면 썸네일도 암호문이다. <img> 에 물리면 깨진 그림이 뜨므로
   // 아이콘 폴백으로 내려보낸다.
-  if (memo.file?.hasThumb && !(memo.file.encrypted && !swReady)) {
+  if (memo.file?.hasThumb) {
     return (
       <div {...grab} className={cn("thumb-checker shrink-0 overflow-hidden", box, grabCls)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={thumbUrl(memo.file, swReady)}
+          src={thumbUrl(memo.file)}
           alt=""
           loading="lazy"
           draggable={false}
@@ -160,7 +158,6 @@ function ActionButtons({
   actions: MemoActions;
   floating?: boolean;
 }) {
-  const swReady = useSwReady();
   const stop = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -180,16 +177,15 @@ function ActionButtons({
     >
       {memo.file && (
         <a
-          href={viewUrl(memo.file, { dl: true, swReady })}
+          href={viewUrl(memo.file, { dl: true })}
           onClick={(e) => {
             e.stopPropagation();
             e.preventDefault();
-            startDownload(memo.file!, swReady);
+            startDownload(memo.file!);
           }}
           className={btn}
           aria-label="다운로드"
-          aria-disabled={!!downloadBlocker(memo.file, swReady)}
-          title={downloadBlocker(memo.file, swReady) ?? "다운로드"}
+          title="다운로드"
         >
           <Download className="h-3 w-3" />
         </a>

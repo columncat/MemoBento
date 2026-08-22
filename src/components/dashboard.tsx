@@ -29,7 +29,7 @@ import { api } from "@/lib/client-api";
 
 import { AgentChat } from "./agent-chat";
 import { startDownload } from "@/lib/download";
-import { registerDecryptWorker, useSwReady } from "@/lib/sw-client";
+import { unregisterDecryptWorker } from "@/lib/sw-client";
 import {
   enqueueUploads,
   setTransferSink,
@@ -152,10 +152,9 @@ export function Dashboard({
   }, []);
 
   // ─ 복호화 서비스 워커 + 업로드 큐 배선 ─
-  const swReady = useSwReady();
   const transfers = useTransferSummary();
   useEffect(() => {
-    registerDecryptWorker();
+    unregisterDecryptWorker();
     setTransferSink((next) => setNotebooks(next));
   }, []);
   useEffect(() => {
@@ -348,7 +347,7 @@ export function Dashboard({
         }
         // 앱에서 열 수 없는 일반 파일은 클릭 즉시 다운로드
         if (memo.file && memo.file.kind === "file") {
-          startDownload(memo.file, swReady);
+          startDownload(memo.file);
           return;
         }
         setViewerId(memo.id);
@@ -381,7 +380,7 @@ export function Dashboard({
         void run(() => api.reorderMemos(nb.id, ids)).catch(() => undefined);
       },
     }),
-    [run, notebooks, swReady],
+    [run, notebooks],
   );
 
   const viewerMemo = useMemo(() => {

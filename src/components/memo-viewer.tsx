@@ -5,8 +5,7 @@ import { AlertCircle, Download, ExternalLink, Loader2, Save, ShieldAlert, Trash2
 import { useEffect, useState } from "react";
 
 import { confirmMemoDelete } from "@/lib/preferences";
-import { downloadBlocker, startDownload } from "@/lib/download";
-import { swReason, useSwReady } from "@/lib/sw-client";
+import { startDownload } from "@/lib/download";
 import {
   formatBytes,
   memoLabel,
@@ -36,7 +35,6 @@ export function MemoViewer({ memo, onClose, onSave, onDelete }: Props) {
   const [draftUrl, setDraftUrl] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const swReady = useSwReady();
 
   useEffect(() => {
     setDraftText(memo?.text ?? "");
@@ -149,13 +147,11 @@ export function MemoViewer({ memo, onClose, onSave, onDelete }: Props) {
             <div className="flex shrink-0 items-center gap-1.5">
               {memo.file && (
                 <a
-                  href={viewUrl(memo.file, { dl: true, swReady })}
+                  href={viewUrl(memo.file, { dl: true })}
                   onClick={(e) => {
                     e.preventDefault();
-                    startDownload(memo.file!, swReady);
+                    startDownload(memo.file!);
                   }}
-                  aria-disabled={!!downloadBlocker(memo.file, swReady)}
-                  title={downloadBlocker(memo.file, swReady) ?? undefined}
                   className="flex items-center gap-1.5 rounded-full bg-(--color-bg-2) px-3 py-1.5 text-xs text-(--color-fg-2) ring-1 ring-(--color-border-soft) transition hover:bg-(--color-surface-hi)"
                 >
                   <Download className="h-3.5 w-3.5" />
@@ -245,7 +241,6 @@ function ViewerBody({
   draftUrl: string;
   onDraftUrl: (v: string) => void;
 }) {
-  const swReady = useSwReady();
 
   if (memo.type === "text") {
     return (
@@ -288,28 +283,12 @@ function ViewerBody({
     );
   }
 
-  // 암호화 파일인데 워커가 없으면 아무것도 그리지 않는다.
-  //
-  // 예전에는 원본(암호문) URL 을 그대로 <img>/<iframe> 에 물렸다. 서버는 암호화
-  // 파일을 application/octet-stream 으로 내려보내므로 그림은 깨지고, PDF 는
-  // 브라우저가 렌더할 수 없어 **그냥 다운로드된다**. 화면은 빈 채로 남는다.
-  if (file.encrypted && !swReady) {
-    return (
-      <div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center">
-        <ShieldAlert className="h-8 w-8 text-(--color-fg-4)" />
-        <p className="text-sm break-keep text-(--color-fg-3)">
-          {swReason() ?? "복호화 준비 중입니다"}
-        </p>
-      </div>
-    );
-  }
-
   if (file.kind === "image") {
     return (
       <div className="thumb-checker grid min-h-[320px] place-items-center p-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={viewUrl(file, { swReady })}
+          src={viewUrl(file)}
           alt={file.name}
           className="max-h-[68vh] max-w-full object-contain"
         />
@@ -320,7 +299,7 @@ function ViewerBody({
   if (file.kind === "pdf") {
     return (
       <iframe
-        src={viewUrl(file, { swReady })}
+        src={viewUrl(file)}
         title={file.name}
         className="h-[70vh] w-full border-0 bg-white"
       />
@@ -328,7 +307,7 @@ function ViewerBody({
   }
 
   if (file.kind === "text") {
-    return <TextFileBody file={file} swReady={swReady} />;
+    return <TextFileBody file={file} />;
   }
 
   return (
@@ -338,34 +317,21 @@ function ViewerBody({
         앱 안에서 열람할 수 없는 형식입니다
       </p>
       <a
-        href={viewUrl(file, { dl: true, swReady })}
+        href={viewUrl(file, { dl: true })}
         onClick={(e) => {
           e.preventDefault();
-          startDownload(file, swReady);
+          startDownload(file);
         }}
-        aria-disabled={!!downloadBlocker(file, swReady)}
-        title={downloadBlocker(file, swReady) ?? undefined}
         className="rounded-full bg-(--color-accent) px-4 py-2 text-xs font-medium text-(--color-bg) hover:bg-(--color-accent-strong)"
       >
         다운로드 ({formatBytes(file.size)})
       </a>
-      {downloadBlocker(file, swReady) && (
-        <p className="text-xs text-(--color-warn)">
-          {downloadBlocker(file, swReady)}
-        </p>
-      )}
     </div>
   );
 }
 
-function TextFileBody({
-  file,
-  swReady,
-}: {
-  file: NonNullable<MemoDTO["file"]>;
-  swReady: boolean;
-}) {
-  const url = viewUrl(file, { swReady });
+function TextFileBody({ file }: { file: NonNullable<MemoDTO["file"]> }) {
+  const url = viewUrl(file);
   const [text, setText] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [truncated, setTruncated] = useState(false);

@@ -13,21 +13,16 @@ import { uid } from "./uid";
  * (Cloudflare 무료 플랜의 요청 본문 100MB 제한도 이 방식으로 우회된다.)
  */
 
-/** 평문 조각 크기. 암호화하면 레코드당 IV 12 + 태그 16 바이트가 더 붙는다. */
+/** 조각 크기. 저장된 바이트가 곧 파일이라 조각 경계가 그대로 오프셋이 된다. */
 export const PLAIN_CHUNK = 8 * 1024 * 1024;
-export const GCM_OVERHEAD = 12 + 16;
-export const ENC_CHUNK = PLAIN_CHUNK + GCM_OVERHEAD;
 
 export interface UploadSession {
   id: string;
   notebookId: string;
   /** 원본 파일명. */
   name: string;
-  /** 평문 기준 전체 크기. */
+  /** 전체 크기. */
   size: number;
-  /** 저장될 바이트 수 (암호화 오버헤드 포함). */
-  storedSize: number;
-  encrypted: boolean;
   createdAt: number;
 }
 
@@ -38,24 +33,15 @@ function tmpDir(): string {
 const partPath = (id: string) => join(tmpDir(), `${id}.part`);
 const metaPath = (id: string) => join(tmpDir(), `${id}.json`);
 
-/** 암호화 시 디스크에 쌓이는 총 바이트. */
-export function storedSizeFor(plainSize: number, encrypted: boolean): number {
-  if (!encrypted) return plainSize;
-  if (plainSize === 0) return 0;
-  const records = Math.ceil(plainSize / PLAIN_CHUNK);
-  return plainSize + records * GCM_OVERHEAD;
-}
-
 /** 조각 n 이 저장 파일에서 시작하는 오프셋. */
-export function offsetOf(index: number, encrypted: boolean): number {
-  return index * (encrypted ? ENC_CHUNK : PLAIN_CHUNK);
+export function offsetOf(index: number): number {
+  return index * PLAIN_CHUNK;
 }
 
 export async function createSession(input: {
   notebookId: string;
   name: string;
   size: number;
-  encrypted: boolean;
 }): Promise<UploadSession> {
   await mkdir(tmpDir(), { recursive: true });
   const session: UploadSession = {
@@ -63,8 +49,6 @@ export async function createSession(input: {
     notebookId: input.notebookId,
     name: input.name,
     size: input.size,
-    storedSize: storedSizeFor(input.size, input.encrypted),
-    encrypted: input.encrypted,
     createdAt: Date.now(),
   };
   await writeFile(metaPath(session.id), JSON.stringify(session));
@@ -90,7 +74,7 @@ export async function writeChunk(
 ): Promise<void> {
   const fh = await open(partPath(session.id), "r+");
   try {
-    await fh.write(bytes, 0, bytes.byteLength, offsetOf(index, session.encrypted));
+    await fh.write(bytes, 0, bytes.byteLength, offsetOf(index));
   } finally {
     await fh.close();
   }
@@ -115,10 +99,10 @@ export async function finalize(
   ext: string,
 ): Promise<{ path: string; storedSize: number }> {
   const actual = await currentSize(session.id);
-  if (actual !== session.storedSize) {
+  if (actual !== session.size) {
     await discard(session.id);
     throw new Error(
-      `업로드가 완전하지 않습니다 (${actual}/${session.storedSize} bytes)`,
+      `업로드가 완전하지 않습니다 (${actual}/${session.size} bytes)`,
     );
   }
   const rel = ext ? `${fileId}.${ext}` : fileId;

@@ -20,7 +20,6 @@ export interface Memo {
     name: string;
     size: number;
     kind: string;
-    encrypted: boolean;
   } | null;
   done: boolean;
   dueAt: number | null;

@@ -68,8 +68,8 @@ export async function POST(req: Request) {
         kind,
         path,
         thumbPath,
-        encrypted: session.encrypted ? 1 : 0,
-        chunkSize: session.encrypted ? PLAIN_CHUNK : 0,
+        encrypted: 0,
+        chunkSize: 0,
       })
       .run();
 
