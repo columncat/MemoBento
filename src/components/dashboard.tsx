@@ -107,6 +107,50 @@ export function Dashboard({
     [fail],
   );
 
+  /*
+   * 에이전트가 바꾼 것을 화면에 들여온다.
+   *
+   * 에이전트는 이 화면을 거치지 않고 서버를 고친다 — Discord 로 시키든 채팅창으로
+   * 시키든 마찬가지다. 그동안 화면의 목록은 페이지를 연 시점의 것 그대로였다.
+   * 답변 속 `[[memo:…]]` 가 방금 만든 메모를 가리키면 목록에 없어 "지워졌거나 없는
+   * 메모" 로 그려졌다. 눈에 띄는 것이 그 경우일 뿐, 고쳐진 메모가 옛 내용으로
+   * 남는 쪽이 더 나쁘다 — 그건 틀린 줄도 모른다.
+   *
+   * 에이전트에게 "바꿨다고 말해라" 고 시키지 않는다. 말하는 것을 잊거나 틀리게
+   * 말할 수 있고, 애초에 그건 모델이 지킬 약속이 아니다. 대신 **바뀐 사실 자체**를
+   * 본다 — MCP 로 들어온 변경은 이미 전부 활동 기록에 한 줄씩 남으므로, 그
+   * 마지막 번호가 달라졌는지만 물어보면 된다.
+   *
+   * 탭이 보일 때만 돈다. 안 보이는 창이 4초마다 서버를 두드릴 이유가 없고,
+   * 다시 보이는 순간 한 번 물어보므로 놓치지도 않는다.
+   */
+  const agentRev = useRef<number | null>(null);
+  useEffect(() => {
+    let alive = true;
+    const check = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const rev = await api.agentRev();
+        if (!alive) return;
+        const seen = agentRev.current;
+        agentRev.current = rev;
+        // 처음 본 값은 기준점일 뿐이다. 커졌는지가 아니라 달라졌는지를 본다 —
+        // 활동 기록을 비우면 번호가 0 으로 떨어진다.
+        if (seen !== null && seen !== rev) setNotebooks(await api.list());
+      } catch {
+        /* 새로고침 실패가 화면을 망가뜨릴 이유는 없다. 다음 차례에 다시 본다. */
+      }
+    };
+    void check();
+    const timer = setInterval(() => void check(), 4000);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      alive = false;
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", check);
+    };
+  }, []);
+
   // ─ 복호화 서비스 워커 + 업로드 큐 배선 ─
   const swReady = useSwReady();
   const transfers = useTransferSummary();

@@ -86,6 +86,29 @@ export function listAgentLog(): AgentLogEntry[] {
     }));
 }
 
+/**
+ * 가장 마지막 기록 번호. **바뀌었는지만** 보려는 화면이 짧은 간격으로 부른다.
+ *
+ * `listAgentLog()` 를 대신 쓰면 안 된다. 그쪽은 200줄을 싣고 부를 때마다 오래된
+ * 것을 지우므로, 4초마다 부르면 4초마다 DELETE 가 돈다.
+ *
+ * 기록을 비우면 이 값이 0 으로 **떨어진다**. 그래서 보는 쪽은 커졌는지가 아니라
+ * 달라졌는지를 본다 — 그래야 한 번 헛도는 것으로 끝난다.
+ */
+export function latestAgentLogId(): number {
+  try {
+    const row = db
+      .select({ id: schema.agentLog.id })
+      .from(schema.agentLog)
+      .orderBy(desc(schema.agentLog.id))
+      .limit(1)
+      .get();
+    return row?.id ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 export function clearAgentLog(): void {
   db.delete(schema.agentLog).run();
 }

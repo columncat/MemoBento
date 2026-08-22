@@ -37,6 +37,19 @@ const jsonInit = (method: string, body: unknown): RequestInit => ({
 export const api = {
   list: () => mutate("/api/notebooks", { method: "GET" }),
 
+  /**
+   * 에이전트가 마지막으로 뭔가 바꾼 기록의 번호.
+   *
+   * 화면이 짧은 간격으로 부르는 자리라 목록이 아니라 숫자 하나만 받는다.
+   * 사람이 화면에서 한 일은 여기 잡히지 않는다 — MCP 로 들어온 요청만 기록에
+   * 남기 때문이다. 그래서 내가 방금 누른 체크 때문에 목록을 다시 읽는 일이 없다.
+   */
+  agentRev: async (): Promise<number> => {
+    const res = await fetch(apiPath("/api/agent-log?head=1"), { cache: "no-store" });
+    const json = await readJson<{ rev?: number }>(res);
+    return typeof json.rev === "number" ? json.rev : 0;
+  },
+
   createNotebook: (name: string, kind: NotebookKind = "memo") =>
     mutate("/api/notebooks", jsonInit("POST", { name, kind })),
 

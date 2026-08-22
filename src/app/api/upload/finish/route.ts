@@ -2,6 +2,7 @@ import { eq } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
+import { logAgent } from "@/lib/agent-log";
 import { db, schema } from "@/lib/db";
 import { contentTypeFor, extOf, kindOf, memoTypeForKind } from "@/lib/file-kind";
 import { removeStored, writeEncryptedThumb } from "@/lib/file-store";
@@ -87,6 +88,15 @@ export async function POST(req: Request) {
       { status: 400 },
     );
   }
+
+  /*
+   * 파일 올리기도 에이전트가 하는 변경이다.
+   *
+   * 여기만 기록에서 빠져 있었다. 메모함·메모·휴지통 라우트는 전부 남기는데
+   * 업로드만 안 남겨서, 에이전트가 올린 파일은 활동 기록에도 안 보이고
+   * 화면이 "뭔가 바뀌었나" 를 물어도 안 바뀐 것으로 나왔다.
+   */
+  logAgent(req, "파일 올리기", session.name, { notebookId: session.notebookId });
 
   return NextResponse.json({ notebooks: listNotebooks(), fileId });
 }
