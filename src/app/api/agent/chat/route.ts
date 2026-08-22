@@ -31,7 +31,11 @@ const AGENT_TOKEN = process.env.AGENT_TOKEN?.trim();
  */
 const TIMEOUT_MS = 15_000;
 
-const bodySchema = z.object({ message: z.string().trim().min(1).max(8000) });
+const bodySchema = z.object({
+  message: z.string().trim().max(8000).default(""),
+  /** 먼저 올려 둔 파일의 번호들. 파일만 보내는 것도 된다. */
+  attachments: z.array(z.string().min(1).max(64)).max(5).optional(),
+});
 
 function unconfigured() {
   return NextResponse.json(
@@ -138,7 +142,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "message 가 필요합니다" }, { status: 400 });
   }
   // 시작만 시키고 번호를 받는다. 답은 화면이 따로 물어본다.
-  return forward("/chat/start", { message: parsed.data.message, from: "memobento" });
+  const { message, attachments } = parsed.data;
+  if (!message && (attachments?.length ?? 0) === 0) {
+    return NextResponse.json({ error: "보낼 것이 없습니다" }, { status: 400 });
+  }
+  return forward("/chat/start", { message, attachments, from: "memobento" });
 }
 
 /** 새 대화 — 에이전트 쪽 세션을 버린다 (Discord 맥락도 함께 사라진다). */
