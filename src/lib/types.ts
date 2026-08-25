@@ -122,9 +122,21 @@ export function viewUrl(
   return fileUrl(file.id, opts.dl ?? false);
 }
 
-/** 썸네일 URL. 없으면 404 → 화면이 아이콘으로 대신한다. */
-export function thumbUrl(file: Pick<FileDTO, "id">): string {
-  return apiPath(`/api/files/${encodeURIComponent(file.id)}/thumb`);
+/**
+ * 미리보기로 쓸 주소. 없으면 null → 화면이 아이콘으로 대신한다.
+ *
+ * 썸네일이 있으면 그것을 쓴다. 없어도 **그림이면 원본을 그대로 건다** —
+ * 썸네일은 브라우저가 만드는 것이라, 브라우저를 거치지 않고 들어온 파일
+ * (Discord 첨부, 채팅창에 붙인 것)에는 처음부터 없다. 그 그림들만 아이콘으로
+ * 남는 것은 어색하다.
+ *
+ * 대신 목록에서 원본을 통째로 받는다. 한 사람이 쓰는 앱이고 응답이 캐시되므로
+ * 감당할 만하다고 본다. 아이콘만 뜨는 것보다 낫다.
+ */
+export function previewUrl(file: Pick<FileDTO, "id" | "kind" | "hasThumb">): string | null {
+  if (file.hasThumb) return apiPath(`/api/files/${encodeURIComponent(file.id)}/thumb`);
+  if (file.kind === "image") return fileUrl(file.id);
+  return null;
 }
 
 /** 메모 표시 이름 — 파일 메모는 title override 없으면 원본 파일명. */

@@ -20,7 +20,7 @@ import {
   MEMO_DND_TYPE,
   hostnameOf,
   memoLabel,
-  thumbUrl,
+  previewUrl,
   formatBytes,
   viewUrl,
   type MemoDTO,
@@ -118,14 +118,13 @@ function Thumb({
     );
   }
 
-  // 워커가 없으면 썸네일도 암호문이다. <img> 에 물리면 깨진 그림이 뜨므로
-  // 아이콘 폴백으로 내려보낸다.
-  if (memo.file?.hasThumb) {
+  const preview = memo.file ? previewUrl(memo.file) : null;
+  if (preview) {
     return (
       <div {...grab} className={cn("thumb-checker shrink-0 overflow-hidden", box, grabCls)}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src={thumbUrl(memo.file)}
+          src={preview}
           alt=""
           loading="lazy"
           draggable={false}

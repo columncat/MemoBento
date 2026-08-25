@@ -5,7 +5,7 @@ import { z } from "zod";
 import { logAgent } from "@/lib/agent-log";
 import { db, schema } from "@/lib/db";
 import { contentTypeFor, extOf, kindOf, memoTypeForKind } from "@/lib/file-kind";
-import { removeStored, writeEncryptedThumb } from "@/lib/file-store";
+import { removeStored, writeThumb } from "@/lib/file-store";
 import { createMemo, listNotebooks } from "@/lib/memo-server";
 import { PLAIN_CHUNK, discard, finalize, loadSession } from "@/lib/upload-session";
 import { uid } from "@/lib/uid";
@@ -15,10 +15,7 @@ export const runtime = "nodejs";
 
 const bodySchema = z.object({
   uploadId: z.string().min(1),
-  /**
-   * 브라우저가 만들고 **암호화까지 마친** 썸네일 레코드 (base64).
-   * 미리보기도 평문으로 남기지 않는다. 없으면 아이콘 폴백.
-   */
+  /** 브라우저가 만든 썸네일 (`data:image/webp;base64,…`). 없으면 아이콘 폴백. */
   thumb: z.string().optional(),
 });
 
@@ -54,7 +51,7 @@ export async function POST(req: Request) {
 
   let thumbPath: string | null = null;
   if (parsed.data.thumb) {
-    thumbPath = await writeEncryptedThumb(fileId, parsed.data.thumb);
+    thumbPath = await writeThumb(fileId, parsed.data.thumb);
   }
 
   try {

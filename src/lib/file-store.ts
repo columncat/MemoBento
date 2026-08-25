@@ -34,23 +34,27 @@ export function safeSegment(s: string): string {
 }
 
 /**
- * 브라우저가 암호화해 보낸 썸네일 레코드를 그대로 저장한다.
- * 서버는 내용을 알지 못한다 — 미리보기 이미지도 평문으로 남기지 않기 위함.
+ * 브라우저가 만들어 보낸 썸네일을 저장한다.
+ *
+ * 썸네일은 **브라우저가 만든다.** 서버에 이미지 디코더(sharp 등)를 들이지
+ * 않으려는 선택이고, 그래서 여기로는 `data:image/webp;base64,…` 꼴로 온다.
+ *
+ * 그 데이터 URL 을 통째로 base64 로 풀면 안 된다. `data:` 접두어까지 섞여
+ * 들어가 쓰레기 바이트가 나오는데, Node 는 base64 아닌 글자를 조용히 버리므로
+ * **오류도 안 난다.** 파일은 멀쩡히 쓰이고 그림만 깨진다 — 암호화를 걷어낼 때
+ * 브라우저가 보내는 모양이 바뀐 것을 여기서 못 따라가 실제로 그렇게 됐다.
  */
-export async function writeEncryptedThumb(
-  id: string,
-  base64Record: string,
-): Promise<string | null> {
-  let bytes: Buffer;
-  try {
-    bytes = Buffer.from(base64Record, "base64");
-  } catch {
-    return null;
-  }
+export async function writeThumb(id: string, dataUrl: string): Promise<string | null> {
+  const m = /^data:(image\/[a-z0-9.+-]+);base64,(.+)$/i.exec(dataUrl.trim());
+  if (!m) return null;
+
+  const bytes = Buffer.from(m[2], "base64");
   if (bytes.length === 0 || bytes.length > 4_000_000) return null;
 
+  // 확장자를 실제 종류에서 뽑는다. 서빙할 때 이걸 보고 타입을 정한다.
+  const ext = m[1].split("/")[1].replace(/[^a-z0-9]/gi, "").toLowerCase() || "webp";
   const root = await ensureUploadDir();
-  const rel = `${id}.thumb.enc`;
+  const rel = `${id}.thumb.${ext}`;
   await writeFile(join(root, rel), bytes);
   return rel;
 }
