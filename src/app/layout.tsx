@@ -1,9 +1,15 @@
 import type { Metadata } from "next";
 
 import "./globals.css";
+import { assetPath } from "@/lib/api-path";
 
 export const metadata: Metadata = {
   title: "MemoBento",
+  /*
+   * 탭 아이콘. 세 앱이 같은 뼈대에 그림만 다르다 — 탭이 여럿 떠 있을 때
+   * 색이 아니라 모양으로 가려야 하기 때문이다.
+   */
+  icons: { icon: assetPath("/favicon.svg") },
   description: "메모함 단위로 메모·링크·이미지·파일을 모아보는 개인 대시보드",
 };
 

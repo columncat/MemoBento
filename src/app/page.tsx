@@ -11,6 +11,7 @@ export default async function HomePage() {
       initialNotebooks={listNotebooks()}
       legacySynced={isExternalLegacy()}
       mailbentoUrl={env.MAILBENTO_URL?.trim() || null}
+      paperbentoUrl={env.PAPERBENTO_URL?.trim() || null}
     />
   );
 }
