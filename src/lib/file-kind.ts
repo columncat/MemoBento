@@ -143,6 +143,18 @@ const AUDIO_MIME: Record<string, string> = {
   mp3: "audio/mpeg",
   wav: "audio/wav",
   m4a: "audio/mp4",
+  /*
+   * `m4b` 는 `m4a` 와 같은 MP4 컨테이너다 (파인더가 "Apple MPEG-4 오디오북"
+   * 이라 적는 것). 여기 없으면 `application/octet-stream` 이 나가고,
+   * `mediaKindOf` 도 null 을 줘서 목록에서는 종이 아이콘이 되고 **누르는
+   * 순간 통째로 내려받는다** — 그러지 않으려고 소리·영상을 갈라 둔 것인데
+   * 확장자 하나가 빠져 그 갈래를 못 타고 있었다.
+   *
+   * VoiceBento 의 `MEDIA_EXTS` 가 이미 `m4b` 를 받아 준다. 저쪽이 받아
+   * 이 메모함에 놓는 것을 이쪽이 모르면 그 파일은 여기서 정체 모를 덩어리가
+   * 된다 — 두 목록은 함께 움직여야 한다.
+   */
+  m4b: "audio/mp4",
   aac: "audio/aac",
   flac: "audio/flac",
   ogg: "audio/ogg",

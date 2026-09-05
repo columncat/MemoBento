@@ -322,32 +322,7 @@ function ViewerBody({
    * 열어 두는 것만으로 통째로 받아 오면 안 누르느니만 못하다.
    */
   const media = mediaKindOf(file.name);
-  if (media) {
-    return (
-      <div className="flex flex-col items-center gap-3 px-6 py-10">
-        {media === "audio" ? (
-          <audio src={viewUrl(file)} controls preload="metadata" className="w-full max-w-xl" />
-        ) : (
-          <video
-            src={viewUrl(file)}
-            controls
-            preload="metadata"
-            className="max-h-[62vh] w-full max-w-3xl rounded-lg bg-black"
-          />
-        )}
-        <a
-          href={viewUrl(file, { dl: true })}
-          onClick={(e) => {
-            e.preventDefault();
-            startDownload(file);
-          }}
-          className="text-[11px] text-(--color-fg-4) underline-offset-2 hover:text-(--color-fg-2) hover:underline"
-        >
-          내려받기 ({formatBytes(file.size)})
-        </a>
-      </div>
-    );
-  }
+  if (media) return <MediaFileBody file={file} media={media} />;
 
   return (
     <div className="flex flex-col items-center justify-center gap-3 px-6 py-16 text-center">
@@ -364,6 +339,86 @@ function ViewerBody({
         className="rounded-full bg-(--color-accent) px-4 py-2 text-xs font-medium text-(--color-bg) hover:bg-(--color-accent-strong)"
       >
         다운로드 ({formatBytes(file.size)})
+      </a>
+    </div>
+  );
+}
+
+/**
+ * 소리·영상 재생.
+ *
+ * ## 못 트는 것을 못 튼다고 말한다
+ *
+ * 브라우저가 컨테이너는 알아도 **안의 코덱을 모르면** 재생기는 아무 말 없이
+ * 죽은 막대가 된다. 실제로 겪은 것이 ALAC 이 든 `.m4a` 다 — 확장자도 MIME 도
+ * `.m4a`(`audio/mp4`) 그대로라 여기까지 멀쩡히 오는데, 크로뮴은
+ * `DEMUXER_ERROR_NO_SUPPORTED_STREAMS` 로 거절한다 (사파리는 튼다). 아이폰
+ * 음성 메모의 "무손실" 설정이 이 형식으로 녹음한다.
+ *
+ * 그때 화면이 아무 말도 안 하면 사람은 파일이 깨진 줄 안다. 파일은 멀쩡하고
+ * VoiceBento 의 전사도 정상으로 끝나 있다(ffmpeg 은 ALAC 을 푼다) — 못 트는
+ * 것은 이 브라우저뿐이다. 그 사실을 적고 내려받기를 남겨 둔다.
+ *
+ * VoiceBento 의 `audio-bar.tsx` 가 이미 같은 줄을 달고 있다. 같은 파일을 두
+ * 앱에서 여는데 한쪽만 침묵하면 안 된다.
+ */
+function MediaFileBody({
+  file,
+  media,
+}: {
+  file: NonNullable<MemoDTO["file"]>;
+  media: "audio" | "video";
+}) {
+  const [failed, setFailed] = useState(false);
+
+  /*
+   * `preload="metadata"` — 길이와 눈금만 받아 둔다. 여는 것만으로 통째로
+   * 받아 오면 안 누르느니만 못하다 (여기 오는 파일은 기가바이트급이다).
+   */
+  const common = {
+    src: viewUrl(file),
+    controls: true,
+    preload: "metadata" as const,
+    onError: () => setFailed(true),
+    onLoadedMetadata: () => setFailed(false),
+  };
+
+  return (
+    <div className="flex flex-col items-center gap-3 px-6 py-10">
+      {media === "audio" ? (
+        <audio {...common} className="w-full max-w-xl" />
+      ) : (
+        <video {...common} className="max-h-[62vh] w-full max-w-3xl rounded-lg bg-black" />
+      )}
+
+      {failed && (
+        <p className="flex max-w-xl items-start gap-1.5 rounded-lg bg-(--color-danger)/10 px-2.5 py-1.5 text-[11px] break-keep text-(--color-danger) ring-1 ring-(--color-danger)/25">
+          <AlertCircle className="mt-0.5 h-3 w-3 shrink-0" />
+          {/*
+            원인을 하나로 못 박지 않는다. `onError` 는 코덱을 모를 때만 터지는
+            것이 아니라 **세션이 풀려 401 이 왔을 때와 파일 본체가 없어 410 이
+            왔을 때도 똑같이** 터진다 — 크로뮴에서 셋 다 `code 4`
+            (`MEDIA_ELEMENT_ERROR: Format error`) 로 구별이 안 되는 것을 재서
+            확인했다. 코덱이라고 단정하면 다시 로그인하면 될 사람이 코덱을 쫓게
+            되고, "파일은 그대로 있다" 는 410 일 때 거짓말이 된다.
+            (VoiceBento 의 `audio-bar.tsx` 가 같은 이유로 안 단정한다.)
+          */}
+          <span>
+            재생하지 못했습니다. 로그인이 풀렸거나, 브라우저가 이 파일의 코덱을
+            모르는 경우입니다. 내려받아 다른 재생기로 열어 볼 수 있습니다.
+          </span>
+        </p>
+      )}
+
+      <a
+        href={viewUrl(file, { dl: true })}
+        onClick={(e) => {
+          e.preventDefault();
+          startDownload(file);
+        }}
+        className="text-[11px] text-(--color-fg-4) underline-offset-2 hover:text-(--color-fg-2) hover:underline"
+      >
+        내려받기 ({formatBytes(file.size)})
       </a>
     </div>
   );
