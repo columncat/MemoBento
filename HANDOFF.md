@@ -213,18 +213,32 @@ standalone 빌드의 route handler 에서 `req.url` 의 오리진은 요청의 H
 접을 때 `position` 을 맨 뒤로 옮긴다. 정렬은 `hidden` 을 첫 키로 쓰므로 그것만으로도
 뒤로 가지만, 나중에 펼쳤을 때 목록 한가운데로 튀어나오지 않게 자리도 함께 옮긴다.
 
-### 3.14 `agent-*` 예약 메모함은 MailBento 와 무관하다
+### 3.14 `agent-*` · `voice` 예약 메모함은 MailBento 와 무관하다
 
-`SYSTEM_KEYS` 에 넷이 있는데 성격이 다르다. `corkboard` / `memo` 는 MailBento 의
+`SYSTEM_KEYS` 에 여섯이 있는데 성격이 다르다. `corkboard` / `memo` 는 MailBento 의
 `widget_state` 에 살아서 담을 수 있는 종류가 고정된다. `agent-memory` /
-`agent-schedule` 은 이 앱의 DB 에 그대로 사는 평범한 메모함이고, 예약이라는 것은
-이름 변경·삭제가 잠긴다는 뜻뿐이다. `acceptedTypes` 와 `legacyTargetOf` 가 앞의 둘만
-특별 취급하므로 새 키를 더해도 레거시 경로에 끌려가지 않는다.
+`agent-schedule` / `agent-inbox` / `voice` 는 이 앱의 DB 에 그대로 사는 평범한
+메모함이고, 예약이라는 것은 이름 변경·삭제가 잠기고 다른 앱이 고정된 id 로 그 자리를
+찾는다는 뜻뿐이다. `acceptedTypes` 와 `legacyTargetOf` 가 앞의 둘만 특별 취급하므로
+새 키를 더해도 레거시 경로에 끌려가지 않는다.
+
+**키를 더하는 데 마이그레이션은 필요 없다.** `system_key` 는 SQLite 에서 그냥 `text`
+컬럼이고(`drizzle/0000_init.sql`) 드리즐의 `enum` 은 타입스크립트에만 있다. 새 키는
+`ensureSystemNotebooks()` 가 `onConflictDoNothing` 으로 행 하나를 넣는 것으로 끝난다
+(Inbox 를 더한 `87ee8e2` 도 `drizzle/` 를 건드리지 않았다).
 
 예약 메모함의 **종류는 코드가 정의하는 값**이라 `ensureSystemNotebooks` 가 어긋난
 것을 되돌린다. `onConflictDoNothing` 만 두면 이미 만들어진 곳에서는 옛 종류가 그대로
 남아 코드를 고쳐도 화면이 따라오지 않는다. 이름과 접힘 여부는 사용자 몫이라 건드리지
 않는다.
+
+`voice` 는 VoiceBento 가 전사할 소리·영상이 놓이는 자리다. 저 앱은 파일을 스스로
+보관하지 않고 `fileId` 만 들고 `/api/files/[id]` 를 부른다 — 보관하는 곳이 둘이면
+같은 바이트가 두 벌 남고 지울 때 한쪽만 지워진다. 소리·영상은 `kindOf` 에서 여전히
+`file` 이다. 새 `FileKind` 를 만들면 이미 저장된 행과 어긋나므로, 갈라 두는 것은
+Content-Type(`AUDIO_MIME`/`VIDEO_MIME`)과 목록 아이콘뿐이다. Content-Type 은 장식이
+아니다 — `application/octet-stream` 으로 나가면 `<audio>` 가 소스를 거절하는
+브라우저가 있다.
 
 ### 3.14 `/api/login` 은 사람이 아닌 클라이언트용이다
 

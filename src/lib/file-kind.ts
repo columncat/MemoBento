@@ -126,6 +126,66 @@ export function memoTypeForKind(kind: FileKind): MemoType {
   return "file";
 }
 
+/**
+ * 소리·영상 확장자 → MIME.
+ *
+ * `kindOf` 는 이것들을 그대로 `file` 로 둔다. 앱 안에서 여는 것은 이미지·PDF·
+ * 텍스트뿐이고, 여기에 새 분류를 만들면 `files.kind` 에 들어가는 값이 늘어나
+ * 이미 저장된 행과 어긋난다. 이 목록은 **Content-Type 을 제대로 붙이려는
+ * 것**이다 — 확장자를 모르면 `application/octet-stream` 이 나가는데, 그러면
+ * `<audio>`/`<video>` 가 소스를 아예 거절하는 브라우저가 있다. VoiceBento 가
+ * `/api/files/[id]` 로 바로 소리를 트므로 이게 곧 재생 여부를 가른다.
+ *
+ * `ts` 는 일부러 뺐다 — MPEG-TS 이기도 하지만 여기서는 TypeScript 가 압도적으로
+ * 흔하고, `TEXT_EXT` 가 이미 가져가 있다.
+ */
+const AUDIO_MIME: Record<string, string> = {
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  m4a: "audio/mp4",
+  aac: "audio/aac",
+  flac: "audio/flac",
+  ogg: "audio/ogg",
+  oga: "audio/ogg",
+  opus: "audio/ogg",
+  weba: "audio/webm",
+  wma: "audio/x-ms-wma",
+  aiff: "audio/aiff",
+  aif: "audio/aiff",
+  amr: "audio/amr",
+  caf: "audio/x-caf",
+};
+
+const VIDEO_MIME: Record<string, string> = {
+  mp4: "video/mp4",
+  m4v: "video/x-m4v",
+  mov: "video/quicktime",
+  webm: "video/webm",
+  mkv: "video/x-matroska",
+  avi: "video/x-msvideo",
+  wmv: "video/x-ms-wmv",
+  flv: "video/x-flv",
+  mpg: "video/mpeg",
+  mpeg: "video/mpeg",
+  m2ts: "video/mp2t",
+  "3gp": "video/3gpp",
+  ogv: "video/ogg",
+};
+
+export const AUDIO_EXT = new Set(Object.keys(AUDIO_MIME));
+export const VIDEO_EXT = new Set(Object.keys(VIDEO_MIME));
+
+/**
+ * 소리인가 영상인가 — 둘 다 아니면 null.
+ * 분류(`FileKind`)를 늘리지 않고 아이콘만 갈아 끼우려고 따로 둔다.
+ */
+export function mediaKindOf(filename: string): "audio" | "video" | null {
+  const ext = extOf(filename);
+  if (AUDIO_EXT.has(ext)) return "audio";
+  if (VIDEO_EXT.has(ext)) return "video";
+  return null;
+}
+
 const MIME_BY_EXT: Record<string, string> = {
   png: "image/png",
   jpg: "image/jpeg",
@@ -157,11 +217,8 @@ const MIME_BY_EXT: Record<string, string> = {
   rar: "application/vnd.rar",
   gz: "application/gzip",
   tar: "application/x-tar",
-  mp3: "audio/mpeg",
-  wav: "audio/wav",
-  mp4: "video/mp4",
-  webm: "video/webm",
-  mov: "video/quicktime",
+  ...AUDIO_MIME,
+  ...VIDEO_MIME,
 };
 
 /**

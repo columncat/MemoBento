@@ -29,6 +29,7 @@ import { api } from "@/lib/client-api";
 
 import { AgentChat } from "./agent-chat";
 import { startDownload } from "@/lib/download";
+import { mediaKindOf } from "@/lib/file-kind";
 import { unregisterDecryptWorker } from "@/lib/sw-client";
 import {
   enqueueUploads,
@@ -348,8 +349,14 @@ export function Dashboard({
           window.open(memo.url, "_blank", "noreferrer");
           return;
         }
-        // 앱에서 열 수 없는 일반 파일은 클릭 즉시 다운로드
-        if (memo.file && memo.file.kind === "file") {
+        /*
+         * 앱에서 열 수 없는 일반 파일은 클릭 즉시 다운로드.
+         *
+         * 소리·영상만 빼 둔다. Voice 메모함이 생기면서 기가바이트짜리 파일이
+         * 들어오게 됐는데, 목록에서 한 번 잘못 누르는 것이 곧 1GB 내려받기가
+         * 되면 곤란하다. 이것들은 창에서 그냥 튼다 (Range 로 필요한 만큼만).
+         */
+        if (memo.file && memo.file.kind === "file" && !mediaKindOf(memo.file.name)) {
           startDownload(memo.file);
           return;
         }

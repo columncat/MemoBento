@@ -3,6 +3,8 @@
 import {
   Download,
   File as FileIcon,
+  FileAudio,
+  FileVideo,
   GripVertical,
   FileCode2,
   FileText,
@@ -15,6 +17,7 @@ import {
 import { useRef, useState } from "react";
 
 import { activeMemoDrag, beginMemoDrag, endMemoDrag } from "@/lib/dnd";
+import { mediaKindOf } from "@/lib/file-kind";
 import { startDownload } from "@/lib/download";
 import {
   MEMO_DND_TYPE,
@@ -55,6 +58,16 @@ export function MemoIcon({
   if (kind === "image") return <ImageIcon className={className} />;
   if (kind === "pdf") return <FileText className={className} />;
   if (kind === "text") return <FileCode2 className={className} />;
+  /*
+   * 소리·영상은 분류상 그냥 `file` 이다 (앱 안에서 열지 않으므로).
+   * 그래도 아이콘은 갈라 준다 — Voice 메모함은 이것만 담기는 자리라,
+   * 똑같은 종이 아이콘이 줄줄이 서면 무엇이 무엇인지 알아볼 수 없다.
+   */
+  if (memo.file) {
+    const media = mediaKindOf(memo.file.name);
+    if (media === "audio") return <FileAudio className={className} />;
+    if (media === "video") return <FileVideo className={className} />;
+  }
   return <FileIcon className={className} />;
 }
 

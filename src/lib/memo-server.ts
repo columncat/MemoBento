@@ -70,6 +70,22 @@ export const SYSTEM_NOTEBOOKS: {
    * 보낸 것이 어디 갔는지 보여야 한다.
    */
   { id: "sys-agent-inbox", systemKey: "agent-inbox", name: "Inbox", position: 899, kind: "memo" },
+  /**
+   * VoiceBento 가 전사할 소리·영상이 놓이는 자리.
+   *
+   * 저 앱은 파일을 스스로 보관하지 않는다. 올린 것은 여기 파일 메모로 남고,
+   * VoiceBento 는 `fileId` 만 들고 `/api/files/[id]` 로 읽는다 — 그 라우트가
+   * Range 를 받으므로 `<audio>` 의 탐색이 그대로 된다. 보관하는 곳이 둘이면
+   * 같은 바이트가 두 벌 남고, 지울 때 한쪽만 지워져 고아가 생긴다.
+   *
+   * 접어 두지 않는다 — Inbox 와 같은 이유다. 여기 든 것은 에이전트의 작업
+   * 공간이 아니라 사람이 방금 올린 자기 파일이라, 어디 갔는지 보여야 한다.
+   *
+   * position 은 Inbox 바로 뒤. 밖에서 들어온 파일을 받는 자리끼리 붙여 둔다
+   * (900·901 은 접어 둔 agent-* 가 쓰지만, 정렬이 hidden 을 첫 키로 쓰므로
+   * 접힌 것들은 숫자와 무관하게 맨 뒤로 간다).
+   */
+  { id: "sys-voice", systemKey: "voice", name: "Voice", position: 902, kind: "memo" },
 ];
 
 /**
@@ -83,7 +99,8 @@ export function acceptedTypes(
   systemKey: SystemKey | null,
   kind: NotebookKind = "memo",
 ): MemoType[] {
-  // MailBento 자료구조를 쓰는 둘만 제한된다. agent-* 는 평범한 메모함이다.
+  // MailBento 자료구조를 쓰는 둘만 제한된다. agent-* 와 voice 는 평범한 메모함이라
+  // 파일도 받는다 (그래서 소리·영상이 Voice 메모함에 그대로 들어간다).
   if (systemKey === "corkboard") return ["link"];
   if (systemKey === "memo") return ["text"];
   // 체크리스트·TODO 는 한 줄짜리 항목만 담는다 (파일·링크는 받지 않음)

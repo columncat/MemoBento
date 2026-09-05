@@ -4,6 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { AlertCircle, Download, ExternalLink, Loader2, Save, ShieldAlert, Trash2, X } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { mediaKindOf } from "@/lib/file-kind";
 import { confirmMemoDelete } from "@/lib/preferences";
 import { startDownload } from "@/lib/download";
 import {
@@ -308,6 +309,44 @@ function ViewerBody({
 
   if (file.kind === "text") {
     return <TextFileBody file={file} />;
+  }
+
+  /*
+   * 소리·영상은 분류상 `file` 이지만 여기서 그냥 튼다.
+   *
+   * Voice 메모함이 생기면서 이 앱에 기가바이트짜리 파일이 들어오게 됐다.
+   * 그대로 두면 목록에서 한 번 잘못 누르는 것이 곧 1GB 내려받기다. 파일
+   * 라우트가 Range 를 받으므로 브라우저는 필요한 만큼만 가져가고 탐색도 된다.
+   *
+   * `preload="metadata"` 인 이유는 길이와 눈금만 있으면 되기 때문이다.
+   * 열어 두는 것만으로 통째로 받아 오면 안 누르느니만 못하다.
+   */
+  const media = mediaKindOf(file.name);
+  if (media) {
+    return (
+      <div className="flex flex-col items-center gap-3 px-6 py-10">
+        {media === "audio" ? (
+          <audio src={viewUrl(file)} controls preload="metadata" className="w-full max-w-xl" />
+        ) : (
+          <video
+            src={viewUrl(file)}
+            controls
+            preload="metadata"
+            className="max-h-[62vh] w-full max-w-3xl rounded-lg bg-black"
+          />
+        )}
+        <a
+          href={viewUrl(file, { dl: true })}
+          onClick={(e) => {
+            e.preventDefault();
+            startDownload(file);
+          }}
+          className="text-[11px] text-(--color-fg-4) underline-offset-2 hover:text-(--color-fg-2) hover:underline"
+        >
+          내려받기 ({formatBytes(file.size)})
+        </a>
+      </div>
+    );
   }
 
   return (

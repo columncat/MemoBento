@@ -13,9 +13,14 @@ export type ViewMode = (typeof VIEW_MODES)[number];
 /**
  * 시스템 예약 메모함 키.
  *
- * corkboard / memo 는 MailBento 의 widget_state 에 산다. agent-* 는 MemoBento
- * 자체 DB 에 살고, 에이전트가 쓰라고 미리 만들어 두는 자리일 뿐이다.
+ * corkboard / memo 는 MailBento 의 widget_state 에 산다. agent-* 와 voice 는
+ * MemoBento 자체 DB 에 사는 평범한 메모함이고, 예약이라는 것은 다른 앱이
+ * 그 자리를 고정된 이름으로 찾는다는 뜻뿐이다.
  * 어느 쪽이든 이름 변경과 삭제는 잠긴다.
+ *
+ * 값을 더해도 마이그레이션이 필요 없다. `system_key` 는 SQLite 에서 그냥
+ * `text` 이고 (`drizzle/0000_init.sql`), 여기 enum 은 타입스크립트에만 있다.
+ * 새 키는 `ensureSystemNotebooks()` 가 행 하나를 넣는 것으로 끝난다.
  */
 export const SYSTEM_KEYS = [
   "corkboard",
@@ -23,6 +28,7 @@ export const SYSTEM_KEYS = [
   "agent-memory",
   "agent-schedule",
   "agent-inbox",
+  "voice",
 ] as const;
 export type SystemKey = (typeof SYSTEM_KEYS)[number];
 
