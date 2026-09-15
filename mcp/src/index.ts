@@ -11,6 +11,8 @@
  *   MEMOBENTO_PASSWORD  인증이 켜진 서버라면 필수
  *   MEMOBENTO_TIMEOUT_MS 기본 15000
  *   MEMOBENTO_UPLOAD_DIR 파일을 올릴 수 있게 할 폴더. 비우면 업로드가 꺼진다.
+ *   MEMOBENTO_STAGE_DIR  PDF 를 꺼내 둘 폴더. 주면 stage_file 이 생긴다 — 부르는 쪽이
+ *                        그 폴더만 파일 읽기로 열어, 모델이 PDF 를 통째로 보게 한다.
  */
 
 /*
@@ -24,6 +26,9 @@
  */
 console.log = (...args: unknown[]) => console.error(...args);
 console.info = (...args: unknown[]) => console.error(...args);
+
+import { mkdirSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
@@ -50,6 +55,7 @@ import {
 import { fence } from "./fence.js";
 import {
   compactPages,
+  pdfPageCount,
   readPdfPages,
   DEFAULT_PDF_CHARS,
   MAX_PAGES_PER_CALL,
@@ -79,6 +85,12 @@ const client = new MemoBentoClient({
 });
 
 const server = new McpServer({ name: "memobento", version: "0.1.0" });
+
+/** stage_file 이 PDF 를 꺼내 둘 폴더. 없으면 그 도구가 안 붙는다. */
+const STAGE_DIR = process.env.MEMOBENTO_STAGE_DIR ? resolve(process.env.MEMOBENTO_STAGE_DIR) : "";
+/** 이보다 크면 통째로 보여 주지 않고 read_file 의 쪽 글자로 돌린다. */
+const NATIVE_PDF_MAX_BYTES = 5 * 1024 * 1024;
+const NATIVE_PDF_MAX_PAGES = 20;
 
 /** 도구 결과는 전부 JSON 텍스트 한 덩어리로 돌려준다. */
 function ok(value: unknown) {
@@ -159,6 +171,11 @@ server.registerTool(
       const res = await list();
       const scope = notebook ? [resolveNotebook(res, notebook)] : res.notebooks;
       const q = query?.toLowerCase();
+      // 파일 이름은 띄어쓰기 대신 `_`·`-` 를 쓰는 일이 많다("3분기_보고서.pdf" 를 "분기 보고서" 로 찾기).
+      // 못 찾으면 모델이 fileKind 로 다시 찾느라 한 턴(실측 약 3만 토큰 입력)을 더 쓴다.
+      // 구분 글자를 걷은 꼴로도 한 번 더 견준다.
+      const squash = (s: string) => s.toLowerCase().replace(/[ _.·-]+/g, "");
+      const qs = q ? squash(q) : "";
       const hits: unknown[] = [];
       for (const nb of scope) {
         for (const m of nb.memos) {
@@ -168,7 +185,7 @@ server.registerTool(
               .filter(Boolean)
               .join("\n")
               .toLowerCase();
-            if (!hay.includes(q)) continue;
+            if (!hay.includes(q) && !(qs && squash(hay).includes(qs))) continue;
           }
           hits.push({
             notebook: { id: nb.id, name: nb.name },
@@ -621,6 +638,10 @@ server.registerTool(
       `한 번에 ${MAX_PAGES_PER_CALL}쪽·maxChars 자까지 담고 totalPages 와 nextPages(안 읽은 쪽, ` +
       "끝이면 null)를 준다. 긴 문서는 pages 에 nextPages 를 넘겨 이어 읽는다. " +
       "textFound:false 면 글자층이 없는 스캔본이다 — 내용을 지어내지 마라. " +
+      (STAGE_DIR
+        ? `PDF 의 그림·표·스캔까지 보려면 먼저 stage_file 을 불러라(${NATIVE_PDF_MAX_PAGES}쪽·` +
+          `${NATIVE_PDF_MAX_BYTES / 1024 / 1024}MB 이하). `
+        : "") +
       "그 밖의 파일(zip·docx·소리 등)은 이름·크기만 온다.",
     inputSchema: {
       memoId: z.string().min(1).describe("파일이 붙어 있는 메모의 id"),
@@ -667,6 +688,106 @@ server.registerTool(
     }
   },
 );
+
+/*
+ * PDF 를 파일째 모델에게 — 폴더에 꺼내 두고 경로를 준다.
+ *
+ * MCP 결과로는 PDF 를 넘길 수 없다(`pdf.ts` 머리). 대신 부르는 쪽이 이 폴더 하나만
+ * Claude Code 의 내장 Read 로 열어 두면, Read 가 PDF 를 문서로 붙여 그림·표·스캔까지
+ * 보인다. 그 값이 쪽당 약 1.6k 토큰이고 한 번 붙으면 세션에 남으므로, 짧은 PDF 만
+ * 이 길로 보내고 긴 것은 read_file 의 쪽 글자로 돌린다.
+ *
+ * 폴더가 정해져 있을 때만 붙인다 (upload_file 과 같은 이유).
+ */
+if (STAGE_DIR) {
+const stageDir = STAGE_DIR;
+server.registerTool(
+  "stage_file",
+  {
+    title: "PDF 를 통째로 보기",
+    description:
+      "메모함에 든 PDF 파일 메모를 Read 로 읽을 수 있는 자리에 꺼내 두고 그 경로를 준다. " +
+      `${NATIVE_PDF_MAX_PAGES}쪽·${NATIVE_PDF_MAX_BYTES / 1024 / 1024}MB 이하만 꺼낸다. ` +
+      "돌려받은 path 를 Read 로 **pages 없이** 읽으면 PDF 가 통째로 붙어 글자뿐 아니라 " +
+      "그림·표·스캔한 쪽까지 보인다(pages 를 주면 읽기가 실패한다). " +
+      'staged:false 면 꺼내지 않은 것이다 — 그때는 read_file 에 pages("1-5" 등)를 짚어 쪽 글자로 읽는다. ' +
+      "그림 파일은 이 도구가 아니라 read_file 이 그대로 보여 준다.",
+    inputSchema: {
+      memoId: z.string().min(1).describe("PDF 가 붙어 있는 메모의 id"),
+    },
+  },
+  async ({ memoId }) => {
+    try {
+      const found = findMemo(await list(), memoId);
+      if (!found) {
+        throw new Error(
+          `그런 메모가 없습니다: ${memoId}. search_memos 나 list_notebooks 가 준 id 를 쓰세요`,
+        );
+      }
+      const { memo, notebook } = found;
+      if (!memo.file) throw new Error("이 메모에는 파일이 없습니다 (텍스트나 링크 메모입니다)");
+      const file = memo.file;
+      const head = { notebook: notebook.name, file: file.name, size: file.size, kind: file.kind };
+
+      if (file.kind !== "pdf") {
+        return ok({
+          ...head,
+          staged: false,
+          note:
+            file.kind === "image"
+              ? "PDF 가 아니라 꺼내지 않았다. 그림은 read_file 로 열면 그대로 보인다."
+              : "PDF 가 아니라 꺼내지 않았다. read_file 로 무엇을 볼 수 있는지 확인해라.",
+        });
+      }
+
+      const toRead = (pages: number | null, why: string) =>
+        ok({
+          ...head,
+          staged: false,
+          totalPages: pages,
+          note:
+            `${why} 꺼내지 않았다. read_file 로 쪽을 짚어 글자로 읽어라 ` +
+            `(예: pages "1-5", 한 번에 ${MAX_PAGES_PER_CALL}쪽까지, 이어 읽기는 nextPages).`,
+        });
+
+      if (file.size > MAX_PDF_BYTES) {
+        return toRead(null, `${mb(file.size)} 로 통째로 보기 상한 ${NATIVE_PDF_MAX_BYTES / 1024 / 1024}MB 를 넘어`);
+      }
+      const got = await fetchFile(client, file.id);
+      // pdf.js 는 받은 배열을 넘겨받아 비울 수 있다 — 쓸 바이트와 따로 복사해 준다.
+      const pages = await pdfPageCount(`${file.id}:${file.size}`, async () => new Uint8Array(got.bytes));
+
+      if (got.bytes.length > NATIVE_PDF_MAX_BYTES) {
+        return toRead(
+          pages,
+          `${got.bytes.length}바이트(${mb(got.bytes.length)})로 통째로 보기 상한 ` +
+            `${NATIVE_PDF_MAX_BYTES / 1024 / 1024}MB(${NATIVE_PDF_MAX_BYTES}바이트)를 넘어`,
+        );
+      }
+      if (pages > NATIVE_PDF_MAX_PAGES) {
+        return toRead(pages, `${pages}쪽으로 통째로 보기 상한 ${NATIVE_PDF_MAX_PAGES}쪽을 넘어`);
+      }
+
+      mkdirSync(stageDir, { recursive: true, mode: 0o700 });
+      // 이름은 메모 id 로 짓는다. 원래 파일 이름은 사람이 붙인 것이라 경로에 쓰지 않는다.
+      const path = join(stageDir, `memo-${memoId.replace(/[^A-Za-z0-9_-]/g, "_")}.pdf`);
+      writeFileSync(path, got.bytes, { mode: 0o600 });
+      return ok({
+        ...head,
+        staged: true,
+        path,
+        pages,
+        size: got.bytes.length,
+        note:
+          "Read 로 이 path 를 pages 없이 읽어라. PDF 가 통째로 붙어 그림·표·스캔까지 보인다. " +
+          "한 번 읽은 PDF 는 대화 기록에 남으니 같은 대화에서 다시 읽지 않아도 된다.",
+      });
+    } catch (e) {
+      return fail(e);
+    }
+  },
+);
+}
 
 server.registerTool(
   "delete_memo",

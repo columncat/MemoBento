@@ -381,6 +381,22 @@ export async function readPdfPages(
   }
 }
 
+/**
+ * 쪽수만 센다. `readPdfPages` 와 같은 캐시를 쓰므로, 뒤이어 같은 파일을
+ * `read_file` 로 읽으면 다시 받지 않는다.
+ */
+export async function pdfPageCount(
+  key: string,
+  load: () => Promise<Uint8Array>,
+): Promise<number> {
+  const entry = await acquire(key, load);
+  try {
+    return entry.doc.numPages;
+  } finally {
+    release(entry);
+  }
+}
+
 async function collect(
   doc: PdfDoc,
   texts: Map<number, string>,
