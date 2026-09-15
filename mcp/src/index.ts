@@ -13,6 +13,18 @@
  *   MEMOBENTO_UPLOAD_DIR 파일을 올릴 수 있게 할 폴더. 비우면 업로드가 꺼진다.
  */
 
+/*
+ * stdout 은 MCP 프로토콜 전용이다. 한 줄이라도 딴 글이 섞이면 부르는 쪽이
+ * 메시지를 못 읽고 연결이 끊긴다.
+ *
+ * pdf.js 는 경고를 `console.log` 로 찍는다 (예: 선택 의존성인 canvas 가 없을 때
+ * "Cannot polyfill `DOMMatrix`"). pdf.js 는 PDF 를 처음 열 때 동적으로 불러오므로
+ * (`pdf.ts`), 그보다 앞인 여기서 stderr 로 돌려 두면 된다. SDK 는
+ * `process.stdout.write` 로 쓰므로 이 줄의 영향을 받지 않는다.
+ */
+console.log = (...args: unknown[]) => console.error(...args);
+console.info = (...args: unknown[]) => console.error(...args);
+
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
@@ -23,9 +35,28 @@ import {
   findMemo,
   resolveNotebook,
   shapeNotebook,
+  type Memo,
   type NotebooksResponse,
 } from "./shape.js";
-import { fetchFile, viewableKind, MAX_READ_BYTES } from "./download.js";
+import {
+  extOf,
+  fetchFile,
+  fetchThumb,
+  sniffImageMime,
+  viewableImageMime,
+  MAX_IMAGE_BYTES,
+  type FetchedFile,
+} from "./download.js";
+import { fence } from "./fence.js";
+import {
+  compactPages,
+  readPdfPages,
+  DEFAULT_PDF_CHARS,
+  MAX_PAGES_PER_CALL,
+  MAX_PDF_BYTES,
+  MAX_PDF_CHARS,
+  MIN_PDF_CHARS,
+} from "./pdf.js";
 import { uploadFile } from "./upload.js";
 
 const NOTEBOOK_KINDS = ["memo", "checklist", "todo", "schedule"] as const;
@@ -107,32 +138,55 @@ server.registerTool(
   {
     title: "메모 검색",
     description:
-      "본문·제목·URL 에서 문자열을 찾는다. 대소문자를 가리지 않는다.",
+      "본문·제목·URL·**파일 이름**에서 문자열을 찾는다. 대소문자를 가리지 않는다. " +
+      'fileKind 를 주면 그 종류의 파일 메모만 고른다 ("image" 그림, "pdf", "text" 글 파일, ' +
+      '"file" 그 밖). 파일 메모는 제목도 본문도 비어 있어 이름으로만 찾힌다 — ' +
+      '"영수증 사진" 처럼 이름을 모르면 query 없이 fileKind 로 후보를 보고 ' +
+      "이름·크기·올린 때(createdAt)로 고른다. 파일 내용은 read_file 로 연다.",
     inputSchema: {
-      query: z.string().min(1),
+      query: z.string().min(1).optional().describe("찾을 문자열. fileKind 를 주면 생략 가능"),
+      fileKind: z
+        .enum(["image", "pdf", "text", "file"])
+        .optional()
+        .describe("이 종류의 파일 메모만"),
       notebook: z.string().optional().describe("이 메모함 안에서만"),
       limit: z.number().int().min(1).max(200).optional().describe("기본 30"),
     },
   },
-  async ({ query, notebook, limit }) => {
+  async ({ query, fileKind, notebook, limit }) => {
     try {
+      if (!query && !fileKind) throw new Error("query 나 fileKind 중 하나는 주어야 합니다");
       const res = await list();
       const scope = notebook ? [resolveNotebook(res, notebook)] : res.notebooks;
-      const q = query.toLowerCase();
+      const q = query?.toLowerCase();
       const hits: unknown[] = [];
       for (const nb of scope) {
         for (const m of nb.memos) {
-          const hay = [m.text, m.title, m.url].filter(Boolean).join("\n").toLowerCase();
-          if (!hay.includes(q)) continue;
+          if (fileKind && m.file?.kind !== fileKind) continue;
+          if (q) {
+            const hay = [m.text, m.title, m.url, m.file?.name]
+              .filter(Boolean)
+              .join("\n")
+              .toLowerCase();
+            if (!hay.includes(q)) continue;
+          }
           hits.push({
             notebook: { id: nb.id, name: nb.name },
-            memo: shapeMemoBrief(m.id, m.type, m.text, m.title, m.url),
+            memo: {
+              ...shapeMemoBrief(m.id, m.type, m.text, m.title, m.url, m.file),
+              ...(m.file
+                ? {
+                    file: { name: m.file.name, kind: m.file.kind, size: m.file.size },
+                    createdAt: new Date(m.createdAt).toISOString(),
+                  }
+                : {}),
+            },
           });
           if (hits.length >= (limit ?? 30)) break;
         }
         if (hits.length >= (limit ?? 30)) break;
       }
-      return ok({ query, count: hits.length, hits });
+      return ok({ query, fileKind, count: hits.length, hits });
     } catch (e) {
       return fail(e);
     }
@@ -145,8 +199,10 @@ function shapeMemoBrief(
   text: string | null,
   title: string | null,
   url: string | null,
+  file?: Memo["file"],
 ) {
-  const label = title ?? text ?? url ?? "";
+  // 파일 메모는 제목도 본문도 비어 있다. 이름이라도 보여야 무엇인지 안다.
+  const label = title || text || url || file?.name || "";
   return { id, type, preview: label.length > 120 ? `${label.slice(0, 120)}…` : label };
 }
 
@@ -273,7 +329,7 @@ server.registerTool(
     title: "메모 추가",
     description:
       "텍스트 또는 링크 메모를 넣는다. 체크리스트·TODO 항목도 텍스트 메모다(dueAt 로 기한). " +
-      "파일 첨부는 브라우저에서 암호화해 조각으로 올리는 구조라 여기서는 다루지 않는다.",
+      "파일 메모는 여기서 만들지 않는다.",
     inputSchema: {
       notebook: z.string().describe("메모함 id 또는 정확한 이름"),
       type: z.enum(["text", "link"]).optional().describe("기본 text"),
@@ -402,91 +458,209 @@ server.registerTool(
 );
 }
 
+type MemoFile = NonNullable<Memo["file"]>;
+
+const mb = (n: number) => `${(n / 1024 / 1024).toFixed(1)}MB`;
+
+/** 머리글(글) 하나 + 그림 한 장. 한 결과에 그림은 한 장만 싣는다. */
+function withImage(head: Record<string, unknown>, img: FetchedFile) {
+  return {
+    content: [
+      { type: "text" as const, text: JSON.stringify(head, null, 1) },
+      { type: "image" as const, data: img.bytes.toString("base64"), mimeType: img.mimeType },
+    ],
+  };
+}
+
+/** 미리보기를 받아 그림으로 넘길 수 있으면 돌려준다. 없거나 못 넘기면 null. */
+async function thumbFor(file: MemoFile): Promise<FetchedFile | null> {
+  if (file.hasThumb === false) return null;
+  // 미리보기는 대신 보내는 것일 뿐이다. 그걸 못 받았다고 도구 전체를 실패시키지
+  // 않는다 — 부르는 쪽이 "원본을 못 연 이유" 를 들을 수 있어야 한다.
+  const thumb = await fetchThumb(client, file.id).catch(() => null);
+  if (!thumb || thumb.bytes.length > MAX_IMAGE_BYTES) return null;
+  // 미리보기도 바이트로 가린다 — 서버가 붙인 타입보다 내용이 먼저다.
+  const real = sniffImageMime(thumb.bytes);
+  return real ? { ...thumb, mimeType: real } : null;
+}
+
+/**
+ * 그림.
+ *
+ * 원본을 넘길 수 있으면 원본을, 아니면 앱이 만든 미리보기를, 그것도 없으면
+ * 못 연다는 말을 돌려준다. **무엇을 보냈는지 늘 적는다** — 400px 미리보기를
+ * 원본인 줄 알고 "글씨가 없다" 고 답하면 틀린 답이 된다.
+ */
+async function readImage(file: MemoFile, head: Record<string, unknown>) {
+  const mime = viewableImageMime(file.name);
+  let why: string;
+  if (mime && file.size <= MAX_IMAGE_BYTES) {
+    const got = await fetchFile(client, file.id);
+    // 이름·content-type 이 아니라 **바이트**로 가린다 (download.ts 의 sniffImageMime).
+    const real = sniffImageMime(got.bytes);
+    if (real) {
+      return withImage({ ...head, mimeType: real, sent: "original" }, { ...got, mimeType: real });
+    }
+    why =
+      got.bytes.length === 0
+        ? "빈 파일이다 (0바이트)"
+        : `이름은 그림(${mime})인데 내용이 png·jpeg·gif·webp 그림이 아니다`;
+  } else if (mime) {
+    why = `원본이 ${mb(file.size)} 로 그림 상한 ${MAX_IMAGE_BYTES / 1024 / 1024}MB 를 넘는다`;
+  } else {
+    why = `${extOf(file.name) || "확장자 없는"} 형식은 그림으로 넘길 수 없다 (png·jpeg·gif·webp 만 된다)`;
+  }
+
+  const thumb = await thumbFor(file);
+  if (thumb) {
+    return withImage(
+      {
+        ...head,
+        mimeType: thumb.mimeType,
+        sent: "thumbnail",
+        note:
+          `${why}. 대신 앱이 올릴 때 만든 미리보기(긴 변 400px 이하)를 보낸다. 원본이 아니다 — ` +
+          "작은 글씨는 안 보일 수 있고, 안 보이면 그렇다고 말해라.",
+      },
+      thumb,
+    );
+  }
+  return ok({
+    ...head,
+    read: false,
+    note:
+      `${why}. 미리보기도 없어 열지 못했다. ` +
+      `png·jpeg·gif·webp 로 ${MAX_IMAGE_BYTES / 1024 / 1024}MB 이하로 다시 올리면 읽을 수 있다.`,
+  });
+}
+
+/**
+ * PDF — 쪽마다 뽑은 글자.
+ *
+ * 왜 PDF 자체를 넘기지 않는지는 `pdf.ts` 머리에 적었다.
+ */
+async function readPdf(
+  file: MemoFile,
+  head: Record<string, unknown>,
+  pages: string | undefined,
+  maxChars: number | undefined,
+) {
+  if (file.size > MAX_PDF_BYTES) {
+    return ok({
+      ...head,
+      read: false,
+      note: `${mb(file.size)} 로 PDF 상한 ${MAX_PDF_BYTES / 1024 / 1024}MB 를 넘어 열지 않았다.`,
+    });
+  }
+  const cap = maxChars ?? DEFAULT_PDF_CHARS;
+  const r = await readPdfPages(
+    `${file.id}:${file.size}`,
+    // pdf.js 는 Node 의 Buffer 를 받지 않는다. Uint8Array 로 옮긴다.
+    async () => new Uint8Array((await fetchFile(client, file.id)).bytes),
+    pages,
+    cap,
+  );
+
+  const shown = compactPages(r.pages.map((p) => p.n));
+  const thumb = !r.textFound && r.pages.some((p) => p.n === 1) ? await thumbFor(file) : null;
+
+  const notes: string[] = [];
+  if (!r.textFound) {
+    notes.push(
+      `p.${shown} 에서 뽑을 글자가 없다. 글자층이 없는 스캔본으로 보인다 — ` +
+        "내용을 지어내지 말고, 글자를 읽을 수 없다고 말해라.",
+    );
+    if (thumb) notes.push("1쪽 미리보기(긴 변 400px 이하)를 함께 보낸다. 원본이 아니라 작은 글씨는 안 보일 수 있다.");
+  } else if (r.emptyPages.length > 0) {
+    notes.push(`p.${compactPages(r.emptyPages)} 에는 글자가 거의 없다 (그림·도표뿐이거나 스캔한 쪽).`);
+  }
+  if (r.cutPage !== null) notes.push(`p.${r.cutPage} 이 길어 앞 ${cap}자 남짓만 실었다.`);
+  if (r.nextPages) notes.push(`안 읽은 쪽이 남았다. 필요하면 pages: "${r.nextPages}" 로 다시 불러라.`);
+  // 태그 이름을 꺾쇠째 적지 않는다. 머리글에 여는 태그가 하나 더 보이면 울타리가 헷갈린다.
+  notes.push("그림·도표·손글씨는 담기지 않는다. 아래 file-text 안이 PDF 에서 뽑은 글자다.");
+
+  const header = JSON.stringify(
+    {
+      ...head,
+      totalPages: r.totalPages,
+      pages: shown,
+      nextPages: r.nextPages,
+      textFound: r.textFound,
+      note: notes.join(" "),
+    },
+    null,
+    1,
+  );
+  const body = r.textFound
+    ? `\n\n${fence(r.pages.map((p) => `--- p.${p.n} ---\n${p.text}`).join("\n\n"), "file-text")}`
+    : "";
+
+  const content: ({ type: "text"; text: string } | { type: "image"; data: string; mimeType: string })[] = [
+    { type: "text", text: header + body },
+  ];
+  if (thumb) {
+    content.push({ type: "image", data: thumb.bytes.toString("base64"), mimeType: thumb.mimeType });
+  }
+  return { content };
+}
+
 server.registerTool(
   "read_file",
   {
     title: "파일 메모 읽기",
     description:
-      "메모함에 올려 둔 파일을 열어 본다. 그림과 PDF 는 내용을 그대로 볼 수 있고, " +
-      "그 밖의 형식은 무엇인지만 알려 준다. " +
-      "파일은 조각마다 잠겨 있는데 여기서 풀어 준다 — 사람이 브라우저에서 여는 것과 같다. " +
-      "메모 id 는 list_notebooks 나 search_memos 가 준 것을 쓴다.",
+      "메모함에 **이미 들어 있는** 파일 메모를 연다. memoId 는 search_memos(파일 이름으로, " +
+      "또는 fileKind 로 추려서)나 list_notebooks 가 준 id 다. " +
+      `그림(png·jpeg·gif·webp, ${MAX_IMAGE_BYTES / 1024 / 1024}MB 까지)은 그림으로 돌려준다. ` +
+      "더 크거나 다른 형식(heic·bmp·svg·tiff 등)이거나 내용이 그림이 아니면, 앱이 올릴 때 " +
+      '만들어 둔 미리보기(긴 변 400px 이하)가 있을 때만 그것을 대신 보내고 sent:"thumbnail" 로 ' +
+      "알린다 — 작은 글씨는 안 보일 수 있다. heic 처럼 브라우저가 못 여는 형식이나 채팅으로 " +
+      "들어온 파일에는 미리보기가 없어 read:false 와 이유가 온다. " +
+      `PDF(${MAX_PDF_BYTES / 1024 / 1024}MB 까지)는 쪽마다 뽑은 **글자**를 돌려준다 — PDF 속 ` +
+      '그림·도표·손글씨는 안 온다. pages 로 쪽을 짚는다("1-5", "7", "2,5-8", "10-"), 안 주면 1쪽부터. ' +
+      `한 번에 ${MAX_PAGES_PER_CALL}쪽·maxChars 자까지 담고 totalPages 와 nextPages(안 읽은 쪽, ` +
+      "끝이면 null)를 준다. 긴 문서는 pages 에 nextPages 를 넘겨 이어 읽는다. " +
+      "textFound:false 면 글자층이 없는 스캔본이다 — 내용을 지어내지 마라. " +
+      "그 밖의 파일(zip·docx·소리 등)은 이름·크기만 온다.",
     inputSchema: {
       memoId: z.string().min(1).describe("파일이 붙어 있는 메모의 id"),
+      pages: z
+        .string()
+        .optional()
+        .describe('PDF 만. 예: "1-5", "7", "2,5-8", "10-"(끝까지). 없으면 1쪽부터'),
+      maxChars: z
+        .number()
+        .int()
+        .min(MIN_PDF_CHARS)
+        .max(MAX_PDF_CHARS)
+        .optional()
+        .describe(`PDF 만. 한 번에 실을 글자 수. 기본 ${DEFAULT_PDF_CHARS}`),
     },
   },
-  async ({ memoId }) => {
+  async ({ memoId, pages, maxChars }) => {
     try {
       const found = findMemo(await list(), memoId);
-      if (!found) throw new Error(`그런 메모가 없습니다: ${memoId}`);
+      if (!found) {
+        throw new Error(
+          `그런 메모가 없습니다: ${memoId}. search_memos 나 list_notebooks 가 준 id 를 쓰세요`,
+        );
+      }
       const { memo, notebook } = found;
       if (!memo.file) throw new Error("이 메모에는 파일이 없습니다 (텍스트나 링크 메모입니다)");
 
-      if (memo.file.size > MAX_READ_BYTES) {
-        return ok({
-          notebook: { id: notebook.id, name: notebook.name },
-          file: { name: memo.file.name, size: memo.file.size, kind: memo.file.kind },
-          read: false,
-          note: `너무 커서 열지 않았습니다 (${Math.round(memo.file.size / 1024 / 1024)}MB). 상한은 ${MAX_READ_BYTES / 1024 / 1024}MB 입니다.`,
-        });
-      }
-
-      const got = await fetchFile(client, memo.file.id);
-      const kind = viewableKind(got.mimeType);
-
-      if (kind === "image") {
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                { notebook: notebook.name, file: got.name, mimeType: got.mimeType },
-                null,
-                1,
-              ),
-            },
-            {
-              type: "image" as const,
-              data: got.bytes.toString("base64"),
-              mimeType: got.mimeType,
-            },
-          ],
-        };
-      }
-
-      if (kind === "pdf") {
-        /*
-         * MCP 응답에는 문서 종류가 없다 — 글·그림·소리·자원뿐이다.
-         * 자원(resource)으로 실어 보내면 부르는 쪽이 알아서 다루기를 기대할 수
-         * 있지만, 그러지 못하는 구현도 있다. 그래서 무엇인지도 함께 적는다.
-         */
-        return {
-          content: [
-            {
-              type: "text" as const,
-              text: JSON.stringify(
-                { notebook: notebook.name, file: got.name, mimeType: got.mimeType },
-                null,
-                1,
-              ),
-            },
-            {
-              type: "resource" as const,
-              resource: {
-                uri: `memobento://file/${memo.file.id}`,
-                mimeType: got.mimeType,
-                blob: got.bytes.toString("base64"),
-              },
-            },
-          ],
-        };
-      }
+      const head = {
+        notebook: notebook.name,
+        file: memo.file.name,
+        size: memo.file.size,
+        kind: memo.file.kind,
+      };
+      if (memo.file.kind === "pdf") return await readPdf(memo.file, head, pages, maxChars);
+      if (memo.file.kind === "image") return await readImage(memo.file, head);
 
       return ok({
-        notebook: { id: notebook.id, name: notebook.name },
-        file: { name: got.name, size: got.bytes.length, mimeType: got.mimeType },
+        ...head,
         read: false,
-        note: "그림이나 PDF 가 아니라 내용은 볼 수 없습니다. 무엇인지만 알려 드립니다.",
+        note: "그림이나 PDF 가 아니라 내용은 볼 수 없다. 이름과 크기만 알려 준다.",
       });
     } catch (e) {
       return fail(e);

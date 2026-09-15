@@ -20,6 +20,8 @@ export interface Memo {
     name: string;
     size: number;
     kind: string;
+    /** 앱이 올릴 때 만든 미리보기가 있는가. 옛 서버는 안 준다. */
+    hasThumb?: boolean;
   } | null;
   done: boolean;
   dueAt: number | null;
