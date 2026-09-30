@@ -12,6 +12,7 @@ export default async function HomePage() {
       legacySynced={isExternalLegacy()}
       mailbentoUrl={env.MAILBENTO_URL?.trim() || null}
       paperbentoUrl={env.PAPERBENTO_URL?.trim() || null}
+      ledgerbentoUrl={env.LEDGERBENTO_URL?.trim() || null}
     />
   );
 }
