@@ -2,6 +2,7 @@
 
 import { Check, StickyNote } from "lucide-react";
 
+import { LedgerRef } from "@/components/ledger-ref";
 import { formatDue, type MemoDTO, type NotebookDTO } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
@@ -42,12 +43,12 @@ function labelOf(m: MemoDTO): string {
 export function MemoRef({ notebooks, memoId, block, onToggle }: Props) {
   const found = locate(notebooks, memoId);
 
+  /*
+   * 메모함에 없으면 장부에서 한 번 더 찾는다. 에이전트가 장부 항목을
+   * `[[memo:…]]` 로 적은 지난 대화가 남아 있다 — 그 id 는 메모함에 영영 없다.
+   */
   if (!found) {
-    return (
-      <span className="rounded bg-(--color-bg) px-1.5 py-0.5 text-[12px] text-(--color-fg-4)">
-        지워졌거나 없는 메모
-      </span>
-    );
+    return <LedgerRef entryId={memoId} block={block} missing="지워졌거나 없는 메모" />;
   }
 
   const { notebook, memo } = found;
