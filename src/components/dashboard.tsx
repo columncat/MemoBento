@@ -51,7 +51,7 @@ import {
 } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-import { CrossAppLink } from "./cross-app-link";
+import { AppSwitcher, type AppUrls } from "./cross-app-link";
 import type { MemoActions } from "./memo-item";
 import { MemoRef } from "./memo-ref";
 import { MemoViewer } from "./memo-viewer";
@@ -65,19 +65,13 @@ import { SortableNotebookCard } from "./sortable-notebook-card";
 export function Dashboard({
   initialNotebooks,
   legacySynced,
-  mailbentoUrl,
-  paperbentoUrl,
-  ledgerbentoUrl,
+  appUrls,
 }: {
   initialNotebooks: NotebookDTO[];
   /** MAILBENTO_DB_PATH 로 MailBento DB 와 직접 동기화 중인가. */
   legacySynced: boolean;
-  /** MAILBENTO_URL override. null 이면 현재 호스트의 3000 포트로 유추. */
-  mailbentoUrl: string | null;
-  /** PAPERBENTO_URL override. null 이면 현재 호스트의 3002 포트로 유추. */
-  paperbentoUrl: string | null;
-  /** LEDGERBENTO_URL override. null 이면 현재 호스트의 3004 포트로 유추. */
-  ledgerbentoUrl: string | null;
+  /** 형제 앱 주소 (`lib/app-urls.ts`). 빈 칸은 화면이 유추한다. */
+  appUrls: AppUrls;
 }) {
   const [notebooks, setNotebooks] = useState<NotebookDTO[]>(initialNotebooks);
   const [error, setError] = useState<string | null>(null);
@@ -506,9 +500,7 @@ export function Dashboard({
               />
             )}
           />
-          <CrossAppLink app="mailbento" href={mailbentoUrl} />
-          <CrossAppLink app="paperbento" href={paperbentoUrl} />
-          <CrossAppLink app="ledgerbento" href={ledgerbentoUrl} />
+          <AppSwitcher urls={appUrls} />
           <Link
             href="/settings"
             className="flex items-center gap-2 rounded-full bg-(--color-accent-soft) px-4 py-2 text-sm text-(--color-accent-strong) ring-1 ring-(--color-accent)/40 transition hover:bg-(--color-accent)/25"

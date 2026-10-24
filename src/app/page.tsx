@@ -1,5 +1,5 @@
 import { Dashboard } from "@/components/dashboard";
-import { env } from "@/lib/env";
+import { appUrls } from "@/lib/app-urls";
 import { isExternalLegacy } from "@/lib/legacy-store";
 import { listNotebooks } from "@/lib/memo-server";
 
@@ -10,9 +10,7 @@ export default async function HomePage() {
     <Dashboard
       initialNotebooks={listNotebooks()}
       legacySynced={isExternalLegacy()}
-      mailbentoUrl={env.MAILBENTO_URL?.trim() || null}
-      paperbentoUrl={env.PAPERBENTO_URL?.trim() || null}
-      ledgerbentoUrl={env.LEDGERBENTO_URL?.trim() || null}
+      appUrls={appUrls()}
     />
   );
 }
