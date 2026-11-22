@@ -1,7 +1,9 @@
 # syntax=docker/dockerfile:1
 
 # ── 베이스 (glibc) — better-sqlite3 prebuild 사용 가능 ──
-FROM node:20-slim AS base
+# node 22: 20 은 2026-04 에 수명이 끝났다. 호스트의 node 도 22 라, 호스트에서
+# 설치한 네이티브 모듈과 이미지의 ABI 가 어긋나는 사고(2026-10-23)도 줄어든다.
+FROM node:22-bookworm-slim AS base
 ENV NEXT_TELEMETRY_DISABLED=1
 WORKDIR /app
 

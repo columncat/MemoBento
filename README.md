@@ -84,8 +84,9 @@ npm run check:recurrence     # 반복 일정 로직 검증
 | `DATABASE_PATH` | `./data/memobento.db` | SQLite 파일 경로 |
 | `UPLOAD_DIR` | `./data/uploads` | 첨부 원본·썸네일 저장 위치 |
 | `MAX_UPLOAD_MB` | `5120` | 업로드 1건당 최대 크기 (MB) |
-| `AUTH_PASSWORD` | (없음) | plaintext 또는 bcrypt 해시. 비우면 인증 끔 |
-| `AUTH_SECRET` | (없음) | 세션 쿠키 암호화 키 (32바이트 base64) |
+| `AUTH_PASSWORD` | (없음) | plaintext 또는 bcrypt 해시. **비우면 앱 전체가 503 으로 막힌다** |
+| `AUTH_SECRET` | (없음) | 세션 쿠키 암호화 키 (32바이트 base64). 비우면 역시 503 |
+| `AUTH_DISABLED` | (없음) | `1` 이면 비밀번호 없이 연다. 잠그지 않으려면 이걸 일부러 적어야 한다 |
 | `MAILBENTO_DB_PATH` | (없음) | MailBento 연동 (아래 참고) |
 | `MAILBENTO_URL` | (없음) | 헤더의 MailBento 버튼 주소. 비우면 자동 유추 |
 | `AGENT_URL` · `AGENT_TOKEN` | (없음) | 에이전트 채팅 (아래 참고) |

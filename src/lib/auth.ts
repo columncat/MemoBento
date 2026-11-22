@@ -6,11 +6,21 @@
 
 import bcrypt from "bcryptjs";
 
+import { authMode } from "./auth-mode";
 import { db, schema } from "./db";
 import { env } from "./env";
 
+/**
+ * 잠금이 켜져 있는가.
+ *
+ * `AUTH_DISABLED=1` 을 명시한 경우에만 false 다. 설정이 비어 있는 경우
+ * ("misconfigured")는 **켜진 것으로 본다** — 그래야 로그인 화면이 "/" 로
+ * 보내 버리거나 /api/login 이 `authDisabled` 를 돌려주는 식으로 문이 열리지
+ * 않는다. 그 상태에서는 미들웨어가 이미 503 으로 막고, verifyPassword 도
+ * 비교할 값이 없어 늘 실패한다.
+ */
 export function isAuthEnabled(): boolean {
-  return !!env.AUTH_PASSWORD;
+  return authMode() !== "off";
 }
 
 /** Plaintext 와 bcrypt 해시 둘 다 자동 감지. timing-safe 비교. */

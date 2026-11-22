@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 import { verifySession } from "@/lib/auth-crypto";
+import { MISCONFIGURED_MESSAGE, authMode } from "@/lib/auth-mode";
 
 /**
  * Edge-runtime 미들웨어 — DB 접근 X, bcrypt X.
@@ -45,6 +46,27 @@ function isApi(pathname: string): boolean {
   return pathname === "/api" || pathname.startsWith("/api/");
 }
 
+/**
+ * 인증 설정이 비어 있을 때의 응답 — 열어 주지 않고 503 으로 멈춘다.
+ *
+ * 로그인 화면까지 막는다. 비밀번호가 없으면 로그인할 방법도 없으므로 그
+ * 화면을 띄워 봐야 헛걸음이고, 무엇이 잘못됐는지 말해 주는 편이 낫다.
+ * API 에는 JSON 을 준다 — 위 `isApi` 와 같은 이유(HTML 이 JSON 파서에 닿지 않게).
+ */
+function misconfigured(pathname: string) {
+  const headers = { "cache-control": "no-store" };
+  if (isApi(pathname)) {
+    return NextResponse.json(
+      { error: MISCONFIGURED_MESSAGE, code: "auth_not_configured" },
+      { status: 503, headers },
+    );
+  }
+  return new NextResponse(MISCONFIGURED_MESSAGE, {
+    status: 503,
+    headers: { ...headers, "content-type": "text/plain; charset=utf-8" },
+  });
+}
+
 function unauthorized() {
   return NextResponse.json(
     { error: "로그인이 필요합니다", code: "unauthenticated" },
@@ -53,10 +75,13 @@ function unauthorized() {
 }
 
 export async function middleware(req: NextRequest) {
-  // 인증 비활성 → 통과
-  if (!process.env.AUTH_PASSWORD) return NextResponse.next();
-
   const { pathname } = req.nextUrl;
+
+  // 비밀번호가 비었다고 열어 주지 않는다 — `AUTH_DISABLED=1` 을 적었을 때만 끈다.
+  // 판정은 `lib/auth-mode.ts` 한 곳에 있다 (서버 쪽 `isAuthEnabled` 와 같은 답을 내도록).
+  const mode = authMode();
+  if (mode === "off") return NextResponse.next();
+  if (mode === "misconfigured") return misconfigured(pathname);
   if (isPublic(pathname)) return NextResponse.next();
 
   const sessionToken = req.cookies.get("mb_session")?.value;

@@ -42,7 +42,11 @@ async function pdfThumb(file: File): Promise<string | null> {
   }
 
   const buf = await file.arrayBuffer();
-  const doc = await pdfjs.getDocument({ data: new Uint8Array(buf) }).promise;
+  // isEvalSupported: false — CSP 가 eval 을 막는다. pdf.js 는 막혀도 느린 길로
+  // 돌아가지만, 그 전에 콘솔에 CSP 위반을 남기므로 처음부터 쓰지 않게 한다.
+  const doc = await pdfjs
+    .getDocument({ data: new Uint8Array(buf), isEvalSupported: false })
+    .promise;
   const page = await doc.getPage(1);
   const base = page.getViewport({ scale: 1 });
   const scale = Math.min(1, MAX_EDGE / Math.max(base.width, base.height));

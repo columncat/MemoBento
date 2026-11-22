@@ -16,8 +16,10 @@ import {
   verifyPassword,
 } from "@/lib/auth";
 import { encryptSession } from "@/lib/auth-crypto";
+import { MISCONFIGURED_MESSAGE, authMode } from "@/lib/auth-mode";
 import {
   checkLoginAllowed,
+  failDelay,
   noteLoginFailure,
   noteLoginSuccess,
 } from "@/lib/login-throttle";
@@ -42,22 +44,22 @@ const bodySchema = z.object({
   remember: z.boolean().optional(),
 });
 
-/**
- * 실패에 딸리는 지연.
- *
- * 이 입구는 폼이 아니라서 무차별 대입이 훨씬 쉽다. 완전한 방어는 아니지만
- * 초당 시도 횟수를 눈에 띄게 깎는다.
- */
-const FAIL_DELAY_MS = 700;
-
 export async function POST(req: Request) {
+  // 설정이 비어 있으면 "꺼짐" 이라고 답하지 않는다 — 그러면 클라이언트가 쿠키
+  // 없이 진행해 버린다. 미들웨어가 먼저 막지만 여기서도 같은 답을 낸다.
+  if (authMode() === "misconfigured") {
+    return NextResponse.json(
+      { error: MISCONFIGURED_MESSAGE, code: "auth_not_configured" },
+      { status: 503, headers: { "cache-control": "no-store" } },
+    );
+  }
   if (!isAuthEnabled()) {
-    // 인증이 꺼진 배포에서는 쿠키가 필요 없다. 클라이언트가 그대로 진행하면 된다.
+    // AUTH_DISABLED=1 로 일부러 끈 배포에서는 쿠키가 필요 없다. 클라이언트가 그대로 진행하면 된다.
     return NextResponse.json({ ok: true, authDisabled: true });
   }
 
   // 횟수로 막는다. 지연만으로는 동시 요청이 겹쳐 사라진다.
-  const gate = checkLoginAllowed(req);
+  const gate = checkLoginAllowed(req.headers);
   if (!gate.ok) {
     return NextResponse.json(
       { error: `시도가 너무 많습니다. ${gate.retryAfter}초 뒤에 다시 시도하세요.` },
@@ -78,8 +80,8 @@ export async function POST(req: Request) {
     } catch {
       /* 기록 실패가 응답을 바꾸면 안 된다 */
     }
-    noteLoginFailure(req);
-    await new Promise((r) => setTimeout(r, FAIL_DELAY_MS));
+    noteLoginFailure(req.headers);
+    await failDelay();
     return NextResponse.json(
       { error: "비밀번호가 틀렸습니다" },
       { status: 401 },
@@ -92,7 +94,7 @@ export async function POST(req: Request) {
     /* */
   }
 
-  noteLoginSuccess(req);
+  noteLoginSuccess(req.headers);
 
   const remember = parsed.data.remember ?? false;
   const now = nowSeconds();
