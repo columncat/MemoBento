@@ -23,7 +23,7 @@ interface TrashEntry {
 }
 
 /** 30일 휴지통 — 되살리기 / 지금 영구 삭제. */
-export function TrashPanel({ retentionDays }: { retentionDays: number }) {
+export function TrashPanel() {
   const [entries, setEntries] = useState<TrashEntry[] | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -66,15 +66,10 @@ export function TrashPanel({ retentionDays }: { retentionDays: number }) {
 
   return (
     <section className="rounded-[var(--radius-card)] bg-(--color-surface) p-6 ring-1 ring-(--color-border-soft)">
-      <header className="mb-1 flex items-center gap-2 text-base font-medium text-(--color-fg)">
+      <header className="mb-4 flex items-center gap-2 text-base font-medium text-(--color-fg)">
         <Trash2 className="h-4 w-4 text-(--color-fg-3)" />
         휴지통
       </header>
-      <p className="mb-4 text-xs break-keep text-(--color-fg-4)">
-        지운 메모함·메모는 <b>{retentionDays}일</b> 동안 여기 보관되고 그때까지
-        되살릴 수 있습니다. 첨부 파일도 함께 남아 있다가 만료되면 같이
-        지워집니다.
-      </p>
 
       {entries === null ? (
         <div className="flex items-center justify-center gap-2 py-8 text-xs text-(--color-fg-4)">

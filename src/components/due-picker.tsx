@@ -276,9 +276,6 @@ export function DuePanel({
             aria-label="기한 시각 (선택)"
           />
         </div>
-        <p className="text-[11px] text-(--color-fg-3)">
-          시각을 비우면 날짜만 정한 기한이 됩니다
-        </p>
 
         {error && <div className="text-(--color-danger)">{error}</div>}
 

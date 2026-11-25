@@ -2,7 +2,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { AlertCircle, Download, ExternalLink, Loader2, Save, ShieldAlert, Trash2, X } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { mediaKindOf } from "@/lib/file-kind";
 import { confirmMemoDelete } from "@/lib/preferences";
@@ -30,6 +30,11 @@ interface Props {
   onDelete: (memo: MemoDTO) => Promise<void>;
 }
 
+/** 텍스트 메모 자동저장 — 손을 멈추고 이만큼 지나면 저장한다. */
+const AUTOSAVE_DELAY_MS = 1000;
+
+type SaveState = "idle" | "saving" | "saved" | "error";
+
 export function MemoViewer({ memo, onClose, onSave, onDelete }: Props) {
   const [draftText, setDraftText] = useState("");
   const [draftTitle, setDraftTitle] = useState("");
@@ -37,12 +42,101 @@ export function MemoViewer({ memo, onClose, onSave, onDelete }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /*
+   * 텍스트 메모의 "마지막으로 서버에 들어간 값".
+   *
+   * 예전에는 `memo.text` 와 비교했고, `memo` 가 바뀔 때마다 초안을 통째로
+   * 갈아끼웠다. 저장하면 곧장 닫혔으니 문제가 없었다. 자동저장은 창을 연 채로
+   * 저장하므로 그대로 두면 **저장 응답이 돌아오는 순간 그 사이 친 글자가
+   * 지워진다** — 응답이 목록 전체를 새로 주고, 그 안의 새 `memo` 객체가 초안을
+   * 덮기 때문이다. 에이전트 변경을 보는 4초 새로고침도 똑같이 덮는다.
+   * 그래서 초안 초기화는 메모가 *바뀔 때(id)* 만 하고, 같은 메모의 서버 값은
+   * 이 기준선과 비교해 쓴다.
+   */
+  const [baseline, setBaseline] = useState("");
+  const baselineRef = useRef("");
+  const draftRef = useRef("");
+  draftRef.current = draftText;
+  const openIdRef = useRef<string | null>(null);
+  const [saveState, setSaveState] = useState<SaveState>("idle");
+  /** 저장을 한 줄로 세운다 — 앞 요청보다 뒤 요청이 먼저 끝나 옛 글이 이기지 않게. */
+  const chainRef = useRef<Promise<unknown>>(Promise.resolve());
+
   useEffect(() => {
-    setDraftText(memo?.text ?? "");
-    setDraftTitle(memo?.title ?? "");
-    setDraftUrl(memo?.url ?? "");
-    setError(null);
+    if (!memo) {
+      openIdRef.current = null;
+      return;
+    }
+    if (memo.id !== openIdRef.current) {
+      openIdRef.current = memo.id;
+      setDraftText(memo.text ?? "");
+      setDraftTitle(memo.title ?? "");
+      setDraftUrl(memo.url ?? "");
+      baselineRef.current = memo.text ?? "";
+      setBaseline(memo.text ?? "");
+      setSaveState("idle");
+      setError(null);
+      return;
+    }
+    // 같은 메모가 밖(에이전트·다른 탭)에서 바뀌었다. 손대지 않은 상태일 때만
+    // 받아들인다 — 쓰고 있는 글을 남의 값으로 덮지 않는다.
+    if (
+      memo.type === "text" &&
+      draftRef.current === baselineRef.current &&
+      (memo.text ?? "") !== baselineRef.current
+    ) {
+      setDraftText(memo.text ?? "");
+      baselineRef.current = memo.text ?? "";
+      setBaseline(memo.text ?? "");
+    }
   }, [memo]);
+
+  const memoRef = useRef(memo);
+  memoRef.current = memo;
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+
+  /** 텍스트를 저장한다. 이미 들어간 값이면 아무것도 안 한다. 실패하면 false. */
+  const persistText = useCallback((text: string): Promise<boolean> => {
+    const run = async () => {
+      const m = memoRef.current;
+      if (!m || m.type !== "text") return true;
+      if (text === baselineRef.current) return true;
+      setSaveState("saving");
+      try {
+        await onSaveRef.current(m, { text });
+        baselineRef.current = text;
+        setBaseline(text);
+        setSaveState("saved");
+        setError(null);
+        return true;
+      } catch (e) {
+        setSaveState("error");
+        setError(e instanceof Error ? e.message : "저장 실패");
+        return false;
+      }
+    };
+    const next = chainRef.current.then(run, run);
+    chainRef.current = next;
+    return next;
+  }, []);
+
+  const textDirty = memo?.type === "text" && draftText !== baseline;
+
+  // 자동저장 — 입력이 멈추면 저장한다. 실패해도 다시 치거나 Ctrl+S 로 재시도된다.
+  useEffect(() => {
+    if (!textDirty) return;
+    const t = setTimeout(() => void persistText(draftText), AUTOSAVE_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [textDirty, draftText, persistText]);
+
+  // 저장 안 된 글이 있는데 탭을 닫으면 묻는다.
+  useEffect(() => {
+    if (!textDirty) return;
+    const h = (e: BeforeUnloadEvent) => e.preventDefault();
+    window.addEventListener("beforeunload", h);
+    return () => window.removeEventListener("beforeunload", h);
+  }, [textDirty]);
 
   if (!memo) {
     return (
@@ -53,24 +147,47 @@ export function MemoViewer({ memo, onClose, onSave, onDelete }: Props) {
   }
 
   const dirty =
-    (memo.type === "text" && draftText !== (memo.text ?? "")) ||
+    textDirty ||
     (memo.type !== "text" && draftTitle !== (memo.title ?? "")) ||
     (memo.type === "link" && draftUrl !== (memo.url ?? ""));
 
-  const save = async () => {
+  const save = async (close: boolean) => {
+    if (memo.type === "text") {
+      // 텍스트는 자동저장과 같은 줄을 탄다 — 따로 보내면 순서가 엉킨다.
+      if (await persistText(draftText)) {
+        if (close) onClose();
+      }
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
       const patch: { text?: string; title?: string; url?: string } = {};
-      if (memo.type === "text") patch.text = draftText;
-      else patch.title = draftTitle;
+      patch.title = draftTitle;
       if (memo.type === "link") patch.url = draftUrl;
       await onSave(memo, patch);
-      onClose();
+      if (close) onClose();
     } catch (e) {
       setError(e instanceof Error ? e.message : "저장 실패");
     } finally {
       setBusy(false);
+    }
+  };
+
+  /** 닫기(✕·Esc·바깥 누르기) — 저장 안 된 글이 있으면 먼저 저장하고, 실패하면 남는다. */
+  const requestClose = async () => {
+    if (memo.type === "text" && draftText !== baselineRef.current) {
+      if (!(await persistText(draftText))) return;
+    }
+    onClose();
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    // Ctrl+S / ⌘+S — 브라우저의 "페이지 저장" 대신 메모를 저장한다. 창은 그대로.
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "s") {
+      e.preventDefault();
+      e.stopPropagation();
+      if (!busy && dirty) void save(false);
     }
   };
 
@@ -87,8 +204,10 @@ export function MemoViewer({ memo, onClose, onSave, onDelete }: Props) {
     }
   };
 
+  const saving = busy || saveState === "saving";
+
   return (
-    <Dialog.Root open onOpenChange={(o) => !o && onClose()}>
+    <Dialog.Root open onOpenChange={(o) => !o && void requestClose()}>
       <Dialog.Portal>
         {/* pointerdown 전파 차단 — 포털 이벤트가 뒤쪽 dnd-kit 센서를 깨우지 않도록 */}
         <Dialog.Overlay
@@ -98,7 +217,8 @@ export function MemoViewer({ memo, onClose, onSave, onDelete }: Props) {
         <Dialog.Content
           aria-describedby={undefined}
           onPointerDown={(e) => e.stopPropagation()}
-          className="fixed top-1/2 left-1/2 z-50 flex max-h-[90vh] w-[min(1040px,95vw)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[var(--radius-card)] bg-(--color-surface) shadow-2xl ring-1 ring-(--color-border)"
+          onKeyDown={onKeyDown}
+          className="fixed top-1/2 left-1/2 z-50 flex h-[94vh] w-[min(1800px,97vw)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[var(--radius-card)] bg-(--color-surface) shadow-2xl ring-1 ring-(--color-border)"
         >
           {/* 헤더 */}
           <div className="flex items-start justify-between gap-4 border-b border-(--color-border-soft) px-6 py-4">
@@ -177,7 +297,8 @@ export function MemoViewer({ memo, onClose, onSave, onDelete }: Props) {
           </div>
 
           {/* 본문 */}
-          <div className="scrollbar-thin min-h-0 flex-1 overflow-y-auto">
+          {/* 세로 flex — 본문(글·그림·PDF)이 창 높이를 끝까지 채우게. */}
+          <div className="scrollbar-thin flex min-h-0 flex-1 flex-col overflow-y-auto">
             <ViewerBody
               memo={memo}
               draftText={draftText}
@@ -189,8 +310,14 @@ export function MemoViewer({ memo, onClose, onSave, onDelete }: Props) {
 
           {/* 푸터 */}
           <div className="flex items-center justify-between gap-3 border-t border-(--color-border-soft) px-6 py-3">
-            <div className="min-w-0 flex-1 text-xs text-(--color-danger)">
-              {error}
+            <div className="min-w-0 flex-1 text-xs">
+              {error ? (
+                <span className="text-(--color-danger)">{error}</span>
+              ) : memo.type === "text" && saveState === "saving" ? (
+                <span className="text-(--color-fg-4)">저장 중…</span>
+              ) : memo.type === "text" && saveState === "saved" && !textDirty ? (
+                <span className="text-(--color-fg-4)">저장됨</span>
+              ) : null}
             </div>
             <div className="flex shrink-0 items-center gap-2">
               <button
@@ -204,17 +331,17 @@ export function MemoViewer({ memo, onClose, onSave, onDelete }: Props) {
               </button>
               <button
                 type="button"
-                onClick={save}
-                disabled={busy || !dirty}
+                onClick={() => void save(true)}
+                disabled={saving || !dirty}
                 className={cn(
                   "flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-medium transition",
                   dirty
                     ? "bg-(--color-accent) text-(--color-bg) hover:bg-(--color-accent-strong)"
                     : "bg-(--color-bg-2) text-(--color-fg-4) ring-1 ring-(--color-border-soft)",
-                  busy && "opacity-50",
+                  saving && "opacity-50",
                 )}
               >
-                {busy ? (
+                {saving ? (
                   <Loader2 className="h-3.5 w-3.5 animate-spin" />
                 ) : (
                   <Save className="h-3.5 w-3.5" />
@@ -248,8 +375,7 @@ function ViewerBody({
       <textarea
         value={draftText}
         onChange={(e) => onDraftText(e.target.value)}
-        rows={14}
-        className="scrollbar-thin block min-h-[280px] w-full resize-y bg-transparent p-6 text-sm leading-relaxed text-(--color-fg-2) outline-none"
+        className="scrollbar-thin block min-h-0 w-full flex-1 resize-none bg-transparent p-6 text-sm leading-relaxed text-(--color-fg-2) outline-none"
         placeholder="메모 내용"
       />
     );
@@ -268,9 +394,6 @@ function ViewerBody({
             className="w-full rounded-lg bg-(--color-bg-2) px-3 py-2 font-mono text-sm text-(--color-fg) ring-1 ring-(--color-border-soft) outline-none focus:ring-(--color-accent)/60"
           />
         </label>
-        <p className="text-[11px] text-(--color-fg-4)">
-          제목은 위쪽 입력란에서 바꿀 수 있습니다.
-        </p>
       </div>
     );
   }
@@ -286,12 +409,12 @@ function ViewerBody({
 
   if (file.kind === "image") {
     return (
-      <div className="thumb-checker grid min-h-[320px] place-items-center p-4">
+      <div className="thumb-checker flex min-h-0 flex-1 items-center justify-center p-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src={viewUrl(file)}
           alt={file.name}
-          className="max-h-[68vh] max-w-full object-contain"
+          className="max-h-full max-w-full object-contain"
         />
       </div>
     );
@@ -302,7 +425,7 @@ function ViewerBody({
       <iframe
         src={viewUrl(file)}
         title={file.name}
-        className="h-[70vh] w-full border-0 bg-white"
+        className="min-h-0 w-full flex-1 border-0 bg-white"
       />
     );
   }
@@ -384,11 +507,11 @@ function MediaFileBody({
   };
 
   return (
-    <div className="flex flex-col items-center gap-3 px-6 py-10">
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 py-6">
       {media === "audio" ? (
         <audio {...common} className="w-full max-w-xl" />
       ) : (
-        <video {...common} className="max-h-[62vh] w-full max-w-3xl rounded-lg bg-black" />
+        <video {...common} className="min-h-0 w-full flex-1 rounded-lg bg-black" />
       )}
 
       {failed && (
@@ -477,11 +600,11 @@ function TextFileBody({ file }: { file: NonNullable<MemoDTO["file"]> }) {
 
   return (
     <>
-      <pre className="m-0 max-h-[68vh] overflow-auto p-6 font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap text-(--color-fg-2)">
+      <pre className="m-0 min-h-0 flex-1 overflow-auto p-6 font-mono text-[12.5px] leading-relaxed whitespace-pre-wrap text-(--color-fg-2)">
         {text}
       </pre>
       {truncated && (
-        <p className="px-6 pb-4 text-[11px] text-(--color-fg-4)">
+        <p className="shrink-0 px-6 pb-4 text-[11px] text-(--color-fg-4)">
           파일이 커서 앞부분만 표시했습니다 — 전체 내용은 다운로드하세요.
         </p>
       )}

@@ -186,7 +186,7 @@ function InstanceView({
     return (
       <div className="rounded-lg border border-dashed border-(--color-border) px-4 py-8 text-center text-sm break-keep text-(--color-fg-3)">
         <CalendarDays className="mx-auto mb-1.5 h-4 w-4" />
-        머리말의 표 버튼을 눌러 반복 일정을 추가하세요
+        반복 일정이 없습니다
       </div>
     );
   }
@@ -198,7 +198,7 @@ function InstanceView({
       {ruleless.length > 0 && (
         <div>
           <SectionHead>
-            주기 없음 · {ruleless.length} — 주기를 정하면 아래 일정에 나타납니다
+            주기 없음 · {ruleless.length}
           </SectionHead>
           <ul className="flex flex-col gap-1">
             {ruleless.map((m) => (
@@ -283,7 +283,7 @@ function InstanceView({
 
       {truncated && (
         <p className="rounded-lg bg-(--color-bg-2) px-2 py-1.5 text-[12px] break-keep text-(--color-fg-2)">
-          너무 많아 {omitted}건을 잘랐습니다. 반복 규칙 목록에서 주기를 조정하세요.
+          너무 많아 {omitted}건을 잘랐습니다.
         </p>
       )}
     </div>

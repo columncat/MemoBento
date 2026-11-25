@@ -492,7 +492,7 @@ export function NotebookCard({
           <Eye className="h-5 w-5" aria-hidden />
           <span className="text-sm font-medium">표시하기</span>
           <span className="text-[11px] break-keep">
-            메모 {notebook.memos.length}개 · 눌러서 이번만 펼치기
+            메모 {notebook.memos.length}개
           </span>
         </button>
       )}
@@ -677,14 +677,6 @@ export function AddNotebookCard({
       <div className="flex w-full flex-col gap-1">
         {(Object.keys(KIND_META) as NotebookKind[]).map((k) => {
           const { label, Icon } = KIND_META[k];
-          const desc =
-            k === "memo"
-              ? "텍스트·링크·파일"
-              : k === "checklist"
-                ? "체크박스 한 줄 항목"
-                : k === "todo"
-                  ? "체크박스 + 기한"
-                  : "주기마다 돌아오는 일정";
           return (
             <button
               key={k}
@@ -700,7 +692,6 @@ export function AddNotebookCard({
             >
               <Icon className="h-3.5 w-3.5 shrink-0" />
               <span className="font-medium">{label}</span>
-              <span className="ml-auto text-[10px] text-(--color-fg-4)">{desc}</span>
             </button>
           );
         })}

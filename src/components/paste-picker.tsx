@@ -108,7 +108,7 @@ export function PastePicker({
 
         {targets.length === 0 && (
           <p className="rounded-lg border border-dashed border-(--color-border) px-3 py-4 text-center text-xs break-keep text-(--color-fg-4)">
-            이걸 받을 수 있는 메모함이 없습니다 — 먼저 메모함을 만드세요
+            이걸 받을 수 있는 메모함이 없습니다
           </p>
         )}
 
@@ -143,10 +143,6 @@ export function PastePicker({
             </li>
           ))}
         </ul>
-
-        <p className="mt-2.5 text-center text-[10.5px] text-(--color-fg-4)">
-          숫자키로 빠르게 선택 · Esc 취소
-        </p>
       </div>
     </>
   );

@@ -197,7 +197,7 @@ export function ScheduleGridModal({
         <Dialog.Content
           aria-describedby={undefined}
           onPointerDown={(e) => e.stopPropagation()}
-          className="fixed top-1/2 left-1/2 z-40 flex h-[88vh] w-[min(1500px,96vw)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[var(--radius-card)] border border-(--color-border) bg-(--color-surface) shadow-2xl"
+          className="fixed top-1/2 left-1/2 z-40 flex h-[94vh] w-[min(1800px,97vw)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[var(--radius-card)] border border-(--color-border) bg-(--color-surface) shadow-2xl"
         >
           <Dialog.Title className="sr-only">
             {notebook.name} — 반복 규칙 편집
@@ -392,9 +392,7 @@ function Grid({
           </span>
         </h2>
         <p className="ml-auto text-[12px] break-keep text-(--color-fg-3)">
-          {dirtyCount > 0
-            ? `저장하지 않은 행 ${dirtyCount}개`
-            : "칸을 눌러 바로 고칩니다 · Enter 저장 · ↑↓ 행 이동 · Esc 되돌리기"}
+          {dirtyCount > 0 && `저장하지 않은 행 ${dirtyCount}개`}
         </p>
         <button
           type="button"
@@ -538,11 +536,6 @@ function Grid({
                           aria-label={`${row + 1}행 일자`}
                         />
                         <span className="text-[12px] text-(--color-fg-3)">일</span>
-                        {Number(d.day) >= 29 && (
-                          <span className="text-[11px] break-keep text-(--color-fg-3)">
-                            없는 달은 건너뜀
-                          </span>
-                        )}
                       </div>
                     ) : d.freq === "yearly" ? (
                       <div className="flex items-center gap-1">
@@ -679,7 +672,7 @@ function Grid({
 
         {memos.length === 0 && (
           <p className="px-5 py-10 text-center text-sm break-keep text-(--color-fg-3)">
-            아직 반복 일정이 없습니다. 아래에서 추가하세요.
+            아직 반복 일정이 없습니다.
           </p>
         )}
       </div>

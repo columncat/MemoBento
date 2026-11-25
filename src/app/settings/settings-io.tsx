@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, Download, Upload } from "lucide-react";
+import { Download, Upload } from "lucide-react";
 import { useRef, useState } from "react";
 
 import {
@@ -126,15 +126,9 @@ export function SettingsIO() {
 
   return (
     <section className="rounded-[var(--radius-card)] bg-(--color-surface) p-6 ring-1 ring-(--color-border-soft)">
-      <header className="mb-3 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-base font-medium text-(--color-fg)">
-            백업 / 복원
-          </div>
-          <div className="text-xs text-(--color-fg-4)">
-            메모함·메모·표시설정을 한 파일로 내보내고 불러옵니다. MailBento
-            백업 JSON 도 그대로 읽을 수 있습니다.
-          </div>
+      <header className="flex items-center justify-between gap-3">
+        <div className="min-w-0 text-base font-medium text-(--color-fg)">
+          백업 / 복원
         </div>
         <div className="flex shrink-0 items-center gap-2">
           <button
@@ -167,13 +161,6 @@ export function SettingsIO() {
           />
         </div>
       </header>
-
-      <p className="flex items-start gap-1.5 text-[11px] text-(--color-fg-4)">
-        <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0 text-[#d08700]" />
-        첨부 파일의 <b>바이트는 백업 JSON 에 포함되지 않습니다</b> — 원본은{" "}
-        <code className="font-mono">data/uploads</code> 볼륨에 있습니다. 서버를
-        옮길 때는 JSON 과 함께 그 디렉터리도 복사하세요.
-      </p>
 
       {status.kind !== "idle" && (
         <p

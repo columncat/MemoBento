@@ -198,10 +198,6 @@ export function PreferencesPanel() {
             </button>
           ))}
         </div>
-        <p className="mt-2 text-[11px] break-keep text-(--color-fg-4)">
-          지운 메모는 30일간 휴지통에 남으므로 <b>묻지 않음</b>도 안전합니다.
-          메모함 삭제는 이 설정과 무관하게 항상 확인합니다.
-        </p>
       </div>
     </section>
   );

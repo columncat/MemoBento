@@ -536,11 +536,6 @@ export function Dashboard({
         </SortableContext>
       </DndContext>
 
-      <footer className="mt-2 text-center text-xs text-(--color-fg-4)">
-        파일은 메모함에 <b>끌어다 놓기</b>, 클립보드는{" "}
-        <b>Ctrl+V</b> 로 메모함을 골라 추가 · 카드 왼쪽 손잡이를 끌면 순서 변경
-      </footer>
-
       {/* 메모 열람 / 편집 */}
       <MemoViewer
         memo={viewerMemo}

@@ -32,7 +32,7 @@ export function NotebookModal({
         <Dialog.Content
           aria-describedby={undefined}
           onPointerDown={(e) => e.stopPropagation()}
-          className="fixed top-1/2 left-1/2 z-40 flex h-[86vh] w-[min(1200px,94vw)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[var(--radius-card)] shadow-2xl"
+          className="fixed top-1/2 left-1/2 z-40 flex h-[94vh] w-[min(1800px,97vw)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-[var(--radius-card)] shadow-2xl"
         >
           <Dialog.Title className="sr-only">{notebook.name}</Dialog.Title>
           <Dialog.Close className="absolute top-3 right-3 z-10 grid h-8 w-8 place-items-center rounded-md bg-(--color-surface)/80 text-(--color-fg-3) backdrop-blur-sm hover:bg-(--color-surface-hi) hover:text-(--color-fg)">

@@ -4,7 +4,6 @@ import Link from "next/link";
 import { isAuthEnabled } from "@/lib/auth";
 import { isExternalLegacy } from "@/lib/legacy-store";
 import { SYSTEM_NOTEBOOKS, listNotebooks } from "@/lib/memo-server";
-import { RETENTION_DAYS } from "@/lib/trash";
 
 import { PreferencesPanel } from "./preferences-panel";
 import { SettingsIO } from "./settings-io";
@@ -81,30 +80,13 @@ export default async function SettingsPage() {
             MailBento 호환
           </div>
           {synced ? (
-            <p className="text-[11.5px] leading-relaxed text-(--color-fg-3)">
-              <span className="text-(--color-accent-strong)">
-                실시간 동기화 켜짐
-              </span>{" "}
-              — <code className="font-mono">MAILBENTO_DB_PATH</code> 가 지정되어
-              시스템 메모함 <b>Corkboard</b> / <b>Memo</b> 가 MailBento 의
-              위젯 데이터를 직접 읽고 씁니다. 한쪽에서 고친 메모가 다른 쪽에도
-              그대로 보입니다.
+            <p className="text-[11.5px] text-(--color-accent-strong)">
+              실시간 동기화 켜짐
             </p>
           ) : (
-            <p className="text-[11.5px] leading-relaxed text-(--color-fg-3)">
-              현재는 MemoBento 자체 DB 에 저장됩니다. 아래{" "}
-              <b>불러오기</b>로 MailBento 백업 JSON 을 그대로 가져올 수 있고,{" "}
-              <code className="font-mono">MAILBENTO_DB_PATH</code> 를 MailBento
-              의 <code className="font-mono">.db</code> 파일로 지정하면 실시간
-              양방향 동기화가 됩니다.
-            </p>
+            <p className="text-[11.5px] text-(--color-fg-3)">자체 DB</p>
           )}
         </div>
-
-        <p className="mt-3 text-[11px] text-(--color-fg-4)">
-          시스템 예약 메모함은 이름 변경·삭제가 잠겨 있고, 안의 메모는 자유롭게
-          편집할 수 있습니다.
-        </p>
       </section>
 
       {/* 표시 설정 */}
@@ -120,21 +102,10 @@ export default async function SettingsPage() {
         끝없이 길어진다. 자주 보는 것도 아니다.
       */}
       <section className="rounded-[var(--radius-card)] bg-(--color-surface) p-6 ring-1 ring-(--color-border-soft)">
-        <h2 className="mb-1 text-lg font-medium text-(--color-fg)">기록</h2>
-        <p className="mb-4 text-sm text-(--color-fg-4)">
-          지운 것과, 에이전트가 고친 것.
-        </p>
+        <h2 className="mb-4 text-lg font-medium text-(--color-fg)">기록</h2>
         <div className="flex flex-col gap-2">
-          <SubPageLink
-            href="/settings/trash"
-            title="휴지통"
-            desc={`지운 메모함·메모를 ${RETENTION_DAYS}일간 보관합니다`}
-          />
-          <SubPageLink
-            href="/settings/agent-log"
-            title="에이전트 기록"
-            desc="MCP 로 연결된 에이전트가 무엇을 고쳤는지"
-          />
+          <SubPageLink href="/settings/trash" title="휴지통" />
+          <SubPageLink href="/settings/agent-log" title="에이전트 기록" />
         </div>
       </section>
     </main>
@@ -144,21 +115,16 @@ export default async function SettingsPage() {
 function SubPageLink({
   href,
   title,
-  desc,
 }: {
   href: string;
   title: string;
-  desc: string;
 }) {
   return (
     <Link
       href={href}
       className="flex items-center justify-between gap-3 rounded-lg bg-(--color-bg-2) px-4 py-3 ring-1 ring-(--color-border-soft) transition hover:bg-(--color-surface-hi)"
     >
-      <span className="min-w-0">
-        <span className="block text-sm text-(--color-fg)">{title}</span>
-        <span className="block text-[12px] break-keep text-(--color-fg-4)">{desc}</span>
-      </span>
+      <span className="min-w-0 text-sm text-(--color-fg)">{title}</span>
       <ChevronRight className="h-4 w-4 shrink-0 text-(--color-fg-4)" />
     </Link>
   );
